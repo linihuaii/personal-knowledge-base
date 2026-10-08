@@ -8,4 +8,4 @@
 python experiments/retrieval_prototype.py
 ```
 
-原型会在工作区临时目录创建索引，验证：TXT/Markdown 样本解析、分段、确定性嵌入、同库检索、跨库过滤、重启读取、删除文档后不再命中、嵌入维度不匹配拒绝加载，并尝试连接本机 OpenAI 兼容端点和 Ollama 端点。输出为 JSON 摘要，不写入用户数据目录；连接失败是如实记录的未验证结果。
+原型会在工作区临时目录创建自制 TXT、Markdown、DOCX、PDF 样本，验证解析、分段、确定性嵌入、同库检索、跨库过滤、重启读取、删除文档后不再命中、嵌入维度不匹配拒绝加载，并对 OpenAI 兼容 `/v1/embeddings` 和 Ollama `/api/embed` 发起真实协议请求。输出为 JSON 摘要，不写入用户数据目录；连接失败是如实记录的未验证结果。

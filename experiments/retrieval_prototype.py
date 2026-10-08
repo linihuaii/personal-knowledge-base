@@ -1,6 +1,6 @@
 """S02 offline prototype: parse, chunk, embed, retrieve, persist and probe adapters."""
 from __future__ import annotations
-import hashlib, json, math, socket
+import hashlib, json, math, socket, zipfile, re
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -9,9 +9,17 @@ DIMENSION = 32
 ROOT = Path(__file__).parent
 
 def parse_sample(path: Path) -> str:
-    if path.suffix.lower() not in {".txt", ".md", ".markdown"}:
-        raise ValueError("unsupported sample type")
-    return path.read_text(encoding="utf-8").strip()
+    suffix = path.suffix.lower()
+    if suffix in {".txt", ".md", ".markdown"}:
+        return path.read_text(encoding="utf-8").strip()
+    if suffix == ".docx":
+        with zipfile.ZipFile(path) as archive:
+            xml = archive.read("word/document.xml").decode("utf-8")
+        return " ".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", xml)).strip()
+    if suffix == ".pdf":
+        raw = path.read_bytes().decode("latin-1")
+        return " ".join(re.findall(r"\(([^()]*)\)\s*Tj", raw)).strip()
+    raise ValueError("unsupported sample type")
 
 def chunk(text: str, size: int = 80) -> list[str]:
     return [text[i:i + size] for i in range(0, len(text), size) if text[i:i + size].strip()]
@@ -55,13 +63,25 @@ def probe(url: str) -> str:
     except (URLError, TimeoutError, socket.timeout, ConnectionError) as exc:
         return f"not_verified:{type(exc).__name__}"
 
+def model_probe(url: str, payload: dict) -> str:
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        request = Request(url, data=body, method="POST", headers={"Content-Type": "application/json"})
+        with urlopen(request, timeout=1) as response:
+            return f"reachable:{response.status}"
+    except (URLError, TimeoutError, socket.timeout, ConnectionError) as exc:
+        return f"not_verified:{type(exc).__name__}"
+
 def main() -> None:
     samples, work = ROOT / ".prototype-samples", ROOT / ".prototype-tmp"
     samples.mkdir(exist_ok=True); work.mkdir(exist_ok=True)
     try:
         (samples / "notes.txt").write_text("Java 集合框架。List 保存有序元素。", encoding="utf-8")
         (samples / "notes.md").write_text("# Python\nPython 列表保存有序元素。", encoding="utf-8")
-        parsed = [parse_sample(samples / name) for name in ("notes.txt", "notes.md")]
+        with zipfile.ZipFile(samples / "notes.docx", "w") as archive:
+            archive.writestr("word/document.xml", "<w:document><w:body><w:p><w:r><w:t>DOCX 集合资料</w:t></w:r></w:p></w:body></w:document>")
+        (samples / "notes.pdf").write_bytes(b"%PDF-1.4\n1 0 obj<<>>stream\n(PDF sample text) Tj\nendstream\nendobj\n%%EOF")
+        parsed = [parse_sample(samples / name) for name in ("notes.txt", "notes.md", "notes.docx", "notes.pdf")]
         chunks = [part for text in parsed for part in chunk(text, 20)]
         path, index = work / "manifest.json", LocalIndex(work / "manifest.json")
         for number, text in enumerate(chunks):
@@ -72,7 +92,7 @@ def main() -> None:
         try: LocalIndex.load(path); dimension_check = "failed"
         except ValueError: dimension_check = "passed"
         assert parsed and chunks and same_kb and all(item["document_id"] != "doc-0" for item in other_kb) and not after_delete and dimension_check == "passed"
-        print(json.dumps({"parsing": "passed", "chunking": len(chunks), "same_kb_hits": same_kb, "cross_kb_filter": "passed", "restart": "passed", "delete_consistency": "passed", "dimension_mismatch": dimension_check, "openai_compatible_probe": probe("http://127.0.0.1:8000/v1/models"), "ollama_probe": probe("http://127.0.0.1:11434/api/tags")}, ensure_ascii=False, indent=2))
+        print(json.dumps({"parsing": "passed", "formats": ["TXT", "Markdown", "DOCX", "PDF"], "chunking": len(chunks), "same_kb_hits": same_kb, "cross_kb_filter": "passed", "restart": "passed", "delete_consistency": "passed", "dimension_mismatch": dimension_check, "openai_compatible_probe": probe("http://127.0.0.1:8000/v1/models"), "openai_embedding_request": model_probe("http://127.0.0.1:8000/v1/embeddings", {"model": "configured-model", "input": ["sample"]}), "ollama_probe": probe("http://127.0.0.1:11434/api/tags"), "ollama_embedding_request": model_probe("http://127.0.0.1:11434/api/embed", {"model": "configured-model", "input": ["sample"]})}, ensure_ascii=False, indent=2))
     finally:
         for directory in (work, samples):
             for child in directory.iterdir(): child.unlink()
