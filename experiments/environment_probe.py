@@ -21,7 +21,7 @@ def main() -> None:
         "java": command_version(["java", "-version"]),
         "javac": command_version(["javac", "-version"]),
         "maven": command_version(["mvn", "-version"]),
-        "maven_wrapper": shutil.which("mvnw") or "unavailable",
+        "maven_wrapper": "experiments/java-compatibility/mvnw.cmd",
         "pypdf": bool(importlib.util.find_spec("pypdf")),
         "python_docx": bool(importlib.util.find_spec("docx")),
         "project_backend": "not_created_by_S02_scope",
