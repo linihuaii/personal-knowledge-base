@@ -39,27 +39,16 @@ class LocalIndex:
     def add(self, chunk_id: str, kb: str, doc: str, text: str) -> None:
         self.entries.append({"chunk_id": chunk_id, "knowledge_base_id": kb, "document_id": doc, "text": text, "vector": embed(text, self.dimension)})
     def save(self) -> None:
-        manifest_temp = self.path.with_suffix(".tmp")
-        vector_path = self.path.with_name("vectors.json")
-        vector_temp = vector_path.with_suffix(".tmp")
-        vectors = {e["chunk_id"]: e.pop("vector") for e in self.entries}
-        vector_temp.write_text(json.dumps(vectors), encoding="utf-8")
-        vector_temp.replace(vector_path)
-        manifest_temp.write_text(json.dumps({"indexVersion": "index-v1", "dimension": self.dimension, "entries": self.entries}, ensure_ascii=False), encoding="utf-8")
-        manifest_temp.replace(self.path)
-        for entry in self.entries:
-            entry["vector"] = vectors[entry["chunk_id"]]
+        temporary = self.path.with_suffix(".tmp")
+        payload = {"indexVersion": "index-v1", "dimension": self.dimension, "entries": self.entries}
+        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(self.path)
     @classmethod
     def load(cls, path: Path) -> "LocalIndex":
         payload = json.loads(path.read_text(encoding="utf-8"))
         if payload.get("indexVersion") != "index-v1" or payload["dimension"] != DIMENSION:
             raise ValueError("embedding dimension mismatch")
-        vectors = json.loads(path.with_name("vectors.json").read_text(encoding="utf-8"))
-        index = cls(path, payload["dimension"])
-        index.entries = payload["entries"]
-        for entry in index.entries:
-            entry["vector"] = vectors[entry["chunk_id"]]
-        return index
+        index = cls(path, payload["dimension"]); index.entries = payload["entries"]; return index
     def delete_document(self, document_id: str) -> None:
         self.entries = [e for e in self.entries if e["document_id"] != document_id]
     def search(self, kb: str, query: str) -> list[dict]:
@@ -110,6 +99,8 @@ def main() -> None:
         for number, text in enumerate(chunks):
             index.add(f"c{number}", "kb-java" if number == 0 else "kb-python", f"doc-{number}", text)
         index.save(); same_kb = index.search("kb-java", "Java 集合"); other_kb = index.search("kb-python", "Java 集合")
+        path.with_suffix(".tmp").write_text("partial-crash", encoding="utf-8")
+        assert LocalIndex.load(path).entries
         reloaded = LocalIndex.load(path); reloaded.delete_document("doc-0"); reloaded.save(); after_delete = reloaded.search("kb-java", "Java 集合")
         bad = json.loads(path.read_text(encoding="utf-8")); bad["dimension"] = DIMENSION + 1; path.write_text(json.dumps(bad), encoding="utf-8")
         try: LocalIndex.load(path); dimension_check = "failed"

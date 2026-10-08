@@ -8,4 +8,4 @@
 python experiments/retrieval_prototype.py
 ```
 
-原型会在工作区临时目录创建自制 TXT、Markdown、结构有效 DOCX 和带交叉引用表的最小 PDF，验证解析、分段、确定性嵌入、manifest/向量文件分离、同库检索、跨库过滤、重启读取、删除文档后不再命中、嵌入维度不匹配拒绝加载，并对 OpenAI 兼容 `/v1/embeddings` 和 Ollama `/api/embed` 发起真实协议请求。输出为 JSON 摘要，不写入用户数据目录；连接失败是如实记录的未验证结果。该脚本不替代 Tika/PDFBox 或真实模型验证。
+原型会在工作区临时目录创建自制 TXT、Markdown、结构有效 DOCX 和带交叉引用表的最小 PDF，验证解析、分段、确定性嵌入、单文件原子快照、同库检索、跨库过滤、重启读取、删除文档后不再命中、嵌入维度不匹配拒绝加载，并对 OpenAI 兼容 `/v1/embeddings` 和 Ollama `/api/embed` 发起真实协议请求。输出为 JSON 摘要，不写入用户数据目录；连接失败是如实记录的未验证结果。该脚本不替代 Tika/PDFBox 或真实模型验证。
