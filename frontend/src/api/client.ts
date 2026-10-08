@@ -7,3 +7,5 @@ export async function uploadDocument(id:string,file:File) { const f=new FormData
 export async function deleteDocument(id:string){const r=await fetch(`/api/v1/documents/${id}`,{method:'DELETE'});if(!r.ok)throw new Error((await r.json()).message||'删除失败')}
 export async function retryDocument(id:string){const r=await fetch(`/api/v1/documents/${id}/retry`,{method:'POST'});if(!r.ok)throw new Error((await r.json()).message||'重试失败');return r.json()}
 export async function previewDocument(id:string){const r=await fetch(`/api/v1/documents/${id}/preview`);if(!r.ok)throw new Error((await r.json()).message||'预览失败');return r.json()}
+export async function editBase(id:string,name:string,description:string){const r=await fetch(`/api/v1/knowledge-bases/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description})});if(!r.ok)throw new Error((await r.json()).message||'保存失败');return r.json()}
+export async function deleteBase(id:string){const r=await fetch(`/api/v1/knowledge-bases/${id}?confirm=true`,{method:'DELETE'});if(!r.ok)throw new Error((await r.json()).message||'删除失败')}

@@ -34,6 +34,5 @@ create table document_chunk (
   page_number integer,
   section_name varchar(255),
   pipeline_version varchar(30) not null,
-  vector_json varchar(2000),
   unique(document_id,ordinal)
 );
