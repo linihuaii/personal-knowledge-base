@@ -46,3 +46,15 @@ event: failed\ndata: {"code":"MODEL_TIMEOUT","message":"..."}
 ## 4. 安全契约
 
 题目 GET 永不返回 `answer`、`explanation` 或评分内部字段；这些字段仅在提交服务内部读取并在评分响应中返回。所有知识库相关资源通过路径库 ID 与资源库 ID 二次校验，拒绝跨库 ID。
+
+## 5. 模型适配契约
+
+生成和嵌入是两个独立能力，配置、请求、结果和错误不得混用。
+
+配置字段：`provider`（`OPENAI_COMPATIBLE` 或 `OLLAMA`）、`baseUrl`、`model`、`apiKeyRef`、`timeoutMs`、`embeddingDimension`，以及生成专属的 `temperature`/`maxTokens`。`apiKeyRef` 只保存环境变量引用，不保存密钥；生成和嵌入配置分别保存；`timeoutMs` 范围为 1000--120000。
+
+生成请求为 `GenerateRequest {model, messages[{role,content}], temperature, maxTokens, stream, deadline}`，结果为 `GenerateResult {text, provider, model, finishReason, usage, requestId}`。流式事件为 `TOKEN`、`COMPLETED` 或 `FAILED`。
+
+嵌入请求为 `EmbedRequest {model, inputs[], expectedDimension?}`，结果为 `EmbedResult {vectors[][], provider, model, dimension, usage, requestId}`。向量数量必须等于输入数量，每个向量维度必须一致；`expectedDimension` 不匹配立即失败。索引指纹为 `sha256(provider + model + dimension + pipelineVersion)`，加载时逐项比较，禁止静默混用。
+
+统一错误分类：`CONFIG_INVALID`、`AUTH_FAILED`、`MODEL_NOT_FOUND`、`CONNECTION_FAILED`、`RATE_LIMITED`、`REQUEST_TIMEOUT`、`CANCELLED`、`INVALID_RESPONSE`、`DIMENSION_MISMATCH`。客户端取消时关闭下游连接；Ollama 失败不得自动切换公共 API。
