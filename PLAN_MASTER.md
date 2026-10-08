@@ -26,7 +26,7 @@
 | 层次 | 选型与约束 |
 | --- | --- |
 | 前端 | Vue 3、TypeScript、Vite、Vue Router、Pinia；选用一种成熟组件库并保持统一 |
-| 后端 | Java 21 LTS、Spring Boot 3.x、Maven；在 S02 核实兼容性并固定具体版本 |
+| 后端 | 使用本机已安装的 JDK 17、Spring Boot 3.x、Maven Wrapper；在 S02 核实兼容性并固定具体版本 |
 | API | REST JSON；长回答采用 SSE；API 契约先于业务实现 |
 | 本地数据库 | 默认采用 H2 文件模式，通过迁移脚本管理结构；避免要求使用者额外安装数据库 |
 | 文件存储 | 可配置本地数据目录，原始文件与处理结果分离 |
