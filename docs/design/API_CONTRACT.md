@@ -1,0 +1,48 @@
+# REST 与 SSE API 契约
+
+阶段：S02；版本：0.1；日期：2026-10-08（Asia/Shanghai）。这是业务实现前的候选契约；S03 固定 OpenAPI 文件和版本。
+
+## 1. 约定
+
+- 基础路径：`/api/v1`；JSON UTF-8；时间为 ISO-8601 offset。
+- 成功响应直接返回资源或分页对象；错误统一为 `{code, message, details?, traceId}`。
+- 用户输入错误 400，资源不存在 404，状态冲突 409，外部模型错误 502/504，服务不可用 503。
+- 所有列表支持 `page`、`pageSize`，服务端限制最大页大小。
+
+## 2. 资源接口
+
+| 方法 | 路径 | 用途 | 关键错误 |
+|---|---|---|---|
+| GET/POST | `/knowledge-bases` | 列表/创建 | `KB_NAME_INVALID`, `KB_NAME_CONFLICT` |
+| GET/PATCH/DELETE | `/knowledge-bases/{id}` | 查看/编辑/删除 | `KB_NOT_FOUND`, `KB_DELETE_CONFIRM_REQUIRED` |
+| GET/POST | `/knowledge-bases/{id}/documents` | 列表/上传 multipart | `FILE_TYPE_UNSUPPORTED`, `FILE_TOO_LARGE`, `PATH_INVALID` |
+| GET | `/documents/{id}` | 文档和处理状态 | `DOCUMENT_NOT_FOUND` |
+| GET | `/documents/{id}/preview` | 提取文本预览 | `DOCUMENT_NOT_READY` |
+| GET | `/documents/{id}/download` | 下载原文件 | `FILE_MISSING` |
+| DELETE/POST | `/documents/{id}` / `/documents/{id}/retry` | 删除/重试 | `DOCUMENT_BUSY`, `RETRY_NOT_ALLOWED` |
+| POST | `/knowledge-bases/{id}/conversations` | 创建会话并返回会话 ID | `KB_NOT_FOUND` |
+| GET/POST | `/conversations/{id}/messages` | 历史/发起 SSE 问答 | `NO_EVIDENCE`, `MODEL_TIMEOUT` |
+| GET/PATCH | `/study-plans/{id}` | 查看/编辑计划 | `PLAN_INVALID`, `PLAN_NOT_FOUND` |
+| POST | `/study-plans/generate` | 生成计划 | `PLAN_GENERATION_INVALID`, `INSUFFICIENT_MATERIAL` |
+| POST | `/study-plans/{id}/replan` | 调整未完成任务 | `REPLAN_INVALID` |
+| POST | `/practice-sessions` | 生成练习 | `QUESTION_SCHEMA_INVALID`, `SOURCE_INSUFFICIENT` |
+| GET | `/practice-sessions/{id}` | 获取不含答案的题目 | — |
+| POST | `/practice-sessions/{id}/submit` | 提交并评分 | `ANSWER_INVALID`, `ALREADY_SUBMITTED` |
+| GET/PUT/POST | `/settings/models`, `/settings/models/{id}`, `/settings/models/test` | 配置/测试模型 | `MODEL_UNREACHABLE`, `EMBEDDING_DIMENSION_MISMATCH` |
+
+## 3. SSE 问答事件
+
+请求 `POST /conversations/{id}/messages`，`Accept: text/event-stream`，请求体 `{content, mode, topK}`。事件类型：
+
+```text
+event: token\ndata: {"text":"..."}
+event: citation\ndata: {"citationId":"...","documentId":"...","location":"p. 3"}
+event: completed\ndata: {"messageId":"..."}
+event: failed\ndata: {"code":"MODEL_TIMEOUT","message":"..."}
+```
+
+客户端断开后服务端取消下游请求并释放任务/连接；不得无限等待。`completed` 或 `failed` 只发送一次。
+
+## 4. 安全契约
+
+题目 GET 永不返回 `answer`、`explanation` 或评分内部字段；这些字段仅在提交服务内部读取并在评分响应中返回。所有知识库相关资源通过路径库 ID 与资源库 ID 二次校验，拒绝跨库 ID。
