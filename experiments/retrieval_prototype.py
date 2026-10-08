@@ -39,15 +39,27 @@ class LocalIndex:
     def add(self, chunk_id: str, kb: str, doc: str, text: str) -> None:
         self.entries.append({"chunk_id": chunk_id, "knowledge_base_id": kb, "document_id": doc, "text": text, "vector": embed(text, self.dimension)})
     def save(self) -> None:
-        temp = self.path.with_suffix(".tmp")
-        temp.write_text(json.dumps({"dimension": self.dimension, "entries": self.entries}, ensure_ascii=False), encoding="utf-8")
-        temp.replace(self.path)
+        manifest_temp = self.path.with_suffix(".tmp")
+        vector_path = self.path.with_name("vectors.json")
+        vector_temp = vector_path.with_suffix(".tmp")
+        vectors = {e["chunk_id"]: e.pop("vector") for e in self.entries}
+        vector_temp.write_text(json.dumps(vectors), encoding="utf-8")
+        vector_temp.replace(vector_path)
+        manifest_temp.write_text(json.dumps({"indexVersion": "index-v1", "dimension": self.dimension, "entries": self.entries}, ensure_ascii=False), encoding="utf-8")
+        manifest_temp.replace(self.path)
+        for entry in self.entries:
+            entry["vector"] = vectors[entry["chunk_id"]]
     @classmethod
     def load(cls, path: Path) -> "LocalIndex":
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if payload["dimension"] != DIMENSION:
+        if payload.get("indexVersion") != "index-v1" or payload["dimension"] != DIMENSION:
             raise ValueError("embedding dimension mismatch")
-        index = cls(path, payload["dimension"]); index.entries = payload["entries"]; return index
+        vectors = json.loads(path.with_name("vectors.json").read_text(encoding="utf-8"))
+        index = cls(path, payload["dimension"])
+        index.entries = payload["entries"]
+        for entry in index.entries:
+            entry["vector"] = vectors[entry["chunk_id"]]
+        return index
     def delete_document(self, document_id: str) -> None:
         self.entries = [e for e in self.entries if e["document_id"] != document_id]
     def search(self, kb: str, query: str) -> list[dict]:
@@ -72,6 +84,17 @@ def model_probe(url: str, payload: dict) -> str:
     except (URLError, TimeoutError, socket.timeout, ConnectionError) as exc:
         return f"not_verified:{type(exc).__name__}"
 
+def make_pdf(text: str) -> bytes:
+    stream = f"BT /F1 12 Tf 72 720 Td ({text}) Tj ET".encode("latin-1")
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>", b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>", b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream", b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    output, offsets = b"%PDF-1.4\n", [0]
+    for number, obj in enumerate(objects, 1):
+        offsets.append(len(output)); output += f"{number} 0 obj\n".encode() + obj + b"\nendobj\n"
+    xref = len(output); output += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    output += b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:])
+    output += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return output
+
 def main() -> None:
     samples, work = ROOT / ".prototype-samples", ROOT / ".prototype-tmp"
     samples.mkdir(exist_ok=True); work.mkdir(exist_ok=True)
@@ -80,7 +103,7 @@ def main() -> None:
         (samples / "notes.md").write_text("# Python\nPython 列表保存有序元素。", encoding="utf-8")
         with zipfile.ZipFile(samples / "notes.docx", "w") as archive:
             archive.writestr("word/document.xml", "<w:document><w:body><w:p><w:r><w:t>DOCX 集合资料</w:t></w:r></w:p></w:body></w:document>")
-        (samples / "notes.pdf").write_bytes(b"%PDF-1.4\n1 0 obj<<>>stream\n(PDF sample text) Tj\nendstream\nendobj\n%%EOF")
+        (samples / "notes.pdf").write_bytes(make_pdf("PDF sample text"))
         parsed = [parse_sample(samples / name) for name in ("notes.txt", "notes.md", "notes.docx", "notes.pdf")]
         chunks = [part for text in parsed for part in chunk(text, 20)]
         path, index = work / "manifest.json", LocalIndex(work / "manifest.json")
