@@ -12,3 +12,7 @@ spring:
     locations: classpath:db/migration
 management.endpoints.web.exposure.include: health,info
 management.endpoint.health.show-details: never
+app:
+  embedding:
+    base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
+    model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text-v2-moe:latest}
