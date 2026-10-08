@@ -1,0 +1,14 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+spring:
+  application.name: knowledge-base-backend
+  datasource:
+    url: jdbc:h2:file:${DATA_ROOT:./data}/db/knowledge;AUTO_SERVER=TRUE;DB_CLOSE_ON_EXIT=FALSE
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.h2.Driver
+  flyway:
+    locations: classpath:db/migration
+management.endpoints.web.exposure.include: health,info
+management.endpoint.health.show-details: never

@@ -1,0 +1,2 @@
+<script setup lang="ts">import { onMounted, ref } from 'vue'; import { getHealth } from '../api/client'; const backendStatus = ref('检查中…'); onMounted(async () => { try { const h = await getHealth(); backendStatus.value = `${h.service} / ${h.status}` } catch { backendStatus.value = '后端未连接' } })</script>
+<template><section class="card"><h2>工程基础设施已就绪</h2><p>后端健康状态：{{ backendStatus }}</p><p class="muted">S03 仅提供工程骨架与基础设施，业务功能将在后续阶段实现。</p></section></template>

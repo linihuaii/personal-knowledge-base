@@ -1,0 +1,1 @@
+<template><main class="shell"><header><div><p class="eyebrow">LOCAL KNOWLEDGE BASE</p><h1>智能知识库管理</h1><p class="muted">S03 工程骨架 · 本地单机模式</p></div></header><nav><RouterLink to="/">首页</RouterLink> · <RouterLink to="/knowledge-bases">知识库</RouterLink> · <RouterLink to="/qa">问答</RouterLink></nav><RouterView /></main></template>
