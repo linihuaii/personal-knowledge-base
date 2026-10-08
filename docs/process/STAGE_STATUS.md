@@ -5,7 +5,7 @@
 | 阶段 | 状态 | 实现提交 | 最新日志 | 审核记录 | 阻塞项 |
 |---|---|---|---|---|---|
 | S01 | APPROVED | `dfc783da5410b129863a596bda94c33af13ec50c`（实现）；`42a1de2`（审核版本） | [S01-20261008-执行日志](logs/S01-20261008-执行日志.md) | [S01-20261008-审核记录](reviews/S01-20261008-审核记录.md) | 无 |
-| S02 | REVIEW_PENDING | `bcfcbb90dde5a8c8a8e3fc9c17cc5b653cd7803c` | [S02-20261008-Ollama验证日志](logs/S02-20261008-Ollama验证日志.md) | [S02-20261008-第五次复审记录](reviews/S02-20261008-第五次复审记录.md) | Tika/PDFBox/H2 与 Ollama 生成已验证；缺专用嵌入模型，Ollama 嵌入未验证；等待复审 |
+| S02 | REVIEW_PENDING | 待提交 | [S02-20261008-Ollama验证日志](logs/S02-20261008-Ollama验证日志.md) | [S02-20261008-第五次复审记录](reviews/S02-20261008-第五次复审记录.md) | Tika/PDFBox/H2、Ollama 生成与嵌入已验证；公共 API 未提供，等待复审判断 |
 | S03 | NOT_STARTED | — | — | — | 前置阶段未完成 |
 | S04 | NOT_STARTED | — | — | — | 前置阶段未完成 |
 | S05 | NOT_STARTED | — | — | — | 前置阶段未完成 |
