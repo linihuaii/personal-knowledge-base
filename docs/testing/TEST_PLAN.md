@@ -4,7 +4,7 @@
 
 ## 范围和环境
 
-- 以 `docs/requirements/TRACEABILITY.md` 的 R01–R12 为追踪基线；本轮回归使用 Java 17、Spring Boot 3.5.6、H2、Node 24.21.0、Vite 6.0.11 和 Windows Microsoft Edge 154。
+- 以 `docs/requirements/TRACEABILITY.md` 的 R01–R12 为追踪基线；本轮最终复核使用 Java 17、Spring Boot 3.5.6、H2、Node 24.21.0、Vite 6.4.3、Vue 3.5.42、Vitest 4.1.11 和 Windows Microsoft Edge 154。早期测试使用的依赖版本仅见历史日志。
 - 确定性测试使用内存 H2、Mockito 和临时 HTTP 服务；真实模型测试使用本机 Ollama `gemma4:e4b` 与 `nomic-embed-text-v2-moe:latest`，资料均为自制合成 TXT。
 - 真实端到端运行使用隔离服务 `127.0.0.1:8180` 和专用临时目录 `backend/target/s08-app-data`；结束后已删除本轮创建的知识库、资料、练习记录与隔离目录。模型 API Key 不存在，公共 API 仍按 S05 审核豁免，不声称已验证。
 - 端到端由本机 Microsoft Edge 154 与 Codex bundled Playwright 执行；桌面视口 1440×1000、窄屏 390×844；浏览器通过本地 Vite 页完成点击、上传、问答、计划、练习与反馈。

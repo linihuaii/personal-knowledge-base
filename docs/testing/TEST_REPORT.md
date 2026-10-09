@@ -11,7 +11,7 @@
 | `cd backend; .\mvnw.cmd "-Dtest=PracticeTests,StudyPlanTests,S04DocumentWorkflowTests,ChatRetrievalTests,ModelSettingsTests,ModelGatewayProtocolTests,UnconfirmedPublicEmbeddingRecoveryTests,FileDatabasePersistenceTests" -DforkCount=0 test` | 当前实现提交完整回归 40 项通过，0 失败/错误/跳过；关闭 Surefire fork 后通过，原 Windows manifest/fork 根路径问题已绕开。 |
 | 从 ZIP 干净副本运行同一 Maven 命令 | 编译 16 个主源文件、9 个测试源文件；40 项通过，0 失败/错误/跳过。 |
 | `cd frontend; npm test -- --run` 与干净副本同命令 | 每处 4 个测试文件、9 项通过。 |
-| `cd frontend; npm run build` 与干净副本同命令 | 每处通过；Vite 6.0.11，42 个模块。 |
+| `cd frontend; npm run build` 与干净副本同命令 | 每处通过；最终锁定 Vite 6.4.3，42 个模块。 |
 | 干净副本 `npm ci --offline --cache <backend/target/s08-npm-cache>` | 从提交的 ZIP 源码副本全新安装 150 个锁定包；依赖 cache 为本轮网络安装所得，避免 npm 全局缓存权限问题。 |
 | 干净副本 README 启动 | `mvnw -B spring-boot:run` 监听 8181，健康 API 返回 `UP`；`npm run dev` 监听 5175；Edge 首页显示后端 `UP`。 |
 | `npm audit --json` 与 `npm audit --omit=dev --json` | 升级前审计快照：完整树 7 个受影响根包（2 moderate、3 high、2 critical），生产树 4 个（1 moderate、3 high）；依赖路径影响数量见首次复审。升级 Vite 6.4.3、Vue 3.5.42、Vitest 4.1.11 后，两命令均退出码 0、0 项漏洞。前后原始 JSON、公告 ID/范围、依赖链与调用面分析见 [依赖安全告警影响分析](evidence/S08-dependency-audit-triage.md)。 |
