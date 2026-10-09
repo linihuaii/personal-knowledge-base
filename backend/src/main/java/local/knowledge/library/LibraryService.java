@@ -24,6 +24,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class LibraryService {
+  public record IndexEntry(String chunkId, String documentId, double[] vector) {}
+  public record IndexSnapshot(String version, String provider, String model, int dimension, List<IndexEntry> entries) {}
   private static final long MAX = 50L * 1024 * 1024;
   private static final Set<String> EXT = Set.of("pdf","docx","txt","md");
   private final JdbcTemplate db; private final Path root; private final ModelGateway embeddings; private final ModelSettingsService modelSettings; private final ObjectMapper json; private final ExecutorService executor=Executors.newFixedThreadPool(2); private final Tika tika = new Tika();
@@ -47,7 +49,41 @@ public class LibraryService {
   private boolean validDocx(byte[] bytes){try(var zip=new java.util.zip.ZipInputStream(new ByteArrayInputStream(bytes))){boolean types=false,body=false;java.util.zip.ZipEntry e;while((e=zip.getNextEntry())!=null){if(e.getName().equals("[Content_Types].xml"))types=true;if(e.getName().equals("word/document.xml"))body=true;}return types&&body;}catch(IOException e){return false;}}
   private String sha(byte[] b){try{var d=MessageDigest.getInstance("SHA-256");return HexFormat.of().formatHex(d.digest(b));}catch(Exception e){throw new IllegalStateException(e);}}
   private synchronized void persistIndex(){try{var config=modelSettings.get(ModelSettingsService.Target.EMBEDDING);String model=config.model();String fingerprint=config.fingerprint();if(db.queryForObject("select count(*) from document_chunk c join document d on d.id=c.document_id where d.status in ('READY','INDEXING') and c.pipeline_version<>?",Integer.class,fingerprint)>0)throw new IllegalStateException("INDEX_FINGERPRINT_MISMATCH");var entries=new ArrayList<Map<String,Object>>();db.query("select id,document_id,vector_json from document_chunk c where exists(select 1 from document d where d.id=c.document_id and d.status in ('READY','INDEXING'))",rs->{try{entries.add(Map.of("chunkId",rs.getString("id"),"documentId",rs.getString("document_id"),"vector",json.readTree(rs.getString("vector_json"))));}catch(Exception parse){throw new IllegalStateException(parse);}});Path d=root.resolve("index");Files.createDirectories(d);Path t=d.resolve("index-v1.json.tmp"),o=d.resolve("index-v1.json");json.writeValue(t.toFile(),Map.of("indexVersion","index-v1","model",model,"provider",config.provider().name(),"dimension",config.embeddingDimension(),"entries",entries));try{Files.move(t,o,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(t,o,StandardCopyOption.REPLACE_EXISTING);}}catch(Exception e){throw new IllegalStateException("INDEX_WRITE_FAILED",e);}}
-  public void assertIndexCompatible() { try {var config=modelSettings.get(ModelSettingsService.Target.EMBEDDING);var manifest=json.readTree(root.resolve("index/index-v1.json").toFile());if(!"index-v1".equals(manifest.path("indexVersion").asText())||!config.model().equals(manifest.path("model").asText())||!config.provider().name().equals(manifest.path("provider").asText())||config.embeddingDimension()!=manifest.path("dimension").asInt(-1))throw new IllegalStateException("INDEX_VERSION_MISMATCH");}catch(Exception e){throw new IllegalStateException("INDEX_VERSION_MISMATCH",e);}}
+  public synchronized IndexSnapshot readIndexSnapshot() {
+    try {
+      var config = modelSettings.get(ModelSettingsService.Target.EMBEDDING);
+      var manifest = json.readTree(root.resolve("index/index-v1.json").toFile());
+      String version = manifest.path("indexVersion").asText();
+      String provider = manifest.path("provider").asText();
+      String model = manifest.path("model").asText();
+      int dimension = manifest.path("dimension").asInt(-1);
+      var entriesNode = manifest.path("entries");
+      if (!"index-v1".equals(version) || !config.model().equals(model)
+          || !config.provider().name().equals(provider) || config.embeddingDimension() != dimension
+          || !entriesNode.isArray()) throw new IllegalStateException("INDEX_VERSION_MISMATCH");
+      var entries = new ArrayList<IndexEntry>(entriesNode.size());
+      var chunkIds = new HashSet<String>();
+      for (var item : entriesNode) {
+        String chunkId = item.path("chunkId").asText();
+        String documentId = item.path("documentId").asText();
+        var vectorNode = item.path("vector");
+        if (chunkId.isBlank() || documentId.isBlank() || !chunkIds.add(chunkId)
+            || !vectorNode.isArray() || vectorNode.size() != dimension) {
+          throw new IllegalStateException("INDEX_CONTENT_INVALID");
+        }
+        double[] vector = new double[dimension];
+        for (int i = 0; i < dimension; i++) {
+          vector[i] = vectorNode.get(i).asDouble(Double.NaN);
+          if (!Double.isFinite(vector[i])) throw new IllegalStateException("INDEX_CONTENT_INVALID");
+        }
+        entries.add(new IndexEntry(chunkId, documentId, vector));
+      }
+      return new IndexSnapshot(version, provider, model, dimension, List.copyOf(entries));
+    } catch (Exception e) {
+      throw new IllegalStateException("INDEX_UNAVAILABLE", e);
+    }
+  }
+  public void assertIndexCompatible() { readIndexSnapshot(); }
   private void process(String id,Path p){
     synchronized(locks.computeIfAbsent(id,k->new Object())) {
       try {

@@ -1,7 +1,5 @@
 package local.knowledge.chat;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.net.ConnectException;
 import java.net.http.HttpTimeoutException;
@@ -18,6 +16,7 @@ import jakarta.annotation.PreDestroy;
 import java.util.stream.Collectors;
 import local.knowledge.model.ModelGateway;
 import local.knowledge.model.ModelSettingsService;
+import local.knowledge.library.LibraryService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -31,12 +30,12 @@ public class ChatService {
   private final JdbcTemplate db;
   private final ModelGateway models;
   private final ModelSettingsService settings;
-  private final ObjectMapper json;
+  private final LibraryService library;
   private final ExecutorService workers = Executors.newFixedThreadPool(2);
   private static final double MIN_SCORE = 0.20;
 
-  public ChatService(JdbcTemplate db, ModelGateway models, ModelSettingsService settings, ObjectMapper json) {
-    this.db = db; this.models = models; this.settings = settings; this.json = json;
+  public ChatService(JdbcTemplate db, ModelGateway models, ModelSettingsService settings, LibraryService library) {
+    this.db = db; this.models = models; this.settings = settings; this.library = library;
   }
 
   @PreDestroy void stopWorkers() { workers.shutdownNow(); }
@@ -105,17 +104,23 @@ public class ChatService {
         || !embedded.provider().equalsIgnoreCase(config.provider().name()) || !embedded.model().equals(config.model()))
       throw new ChatException("DIMENSION_MISMATCH", "查询嵌入与当前索引配置不一致", 409);
     double[] query = embedded.vectors().get(0);
-    var rows = db.queryForList("select c.id chunk_id,d.id document_id,d.original_name,c.chunk_text,c.page_number,c.section_name,c.vector_json "
+    LibraryService.IndexSnapshot snapshot;
+    try { snapshot = library.readIndexSnapshot(); }
+    catch (IllegalStateException e) { throw new ChatException("INDEX_UNAVAILABLE", "本地向量索引缺失、损坏或与当前模型配置不兼容，请重建索引后重试。", 503); }
+    if (snapshot.dimension() != query.length) throw new ChatException("DIMENSION_MISMATCH", "查询向量维度与索引快照不一致，请重建索引后重试。", 409);
+    var indexed = new java.util.HashMap<String, LibraryService.IndexEntry>();
+    snapshot.entries().forEach(entry -> indexed.put(entry.chunkId(), entry));
+    var rows = db.queryForList("select c.id chunk_id,d.id document_id,d.original_name,c.chunk_text,c.page_number,c.section_name "
         + "from document_chunk c join document d on d.id=c.document_id where d.knowledge_base_id=? and d.status='READY' "
         + "and c.pipeline_version=? order by c.ordinal", knowledgeBaseId, fingerprint);
     List<Candidate> candidates = new ArrayList<>();
     for (var row : rows) {
-      JsonNode node = json.readTree(String.valueOf(row.get("VECTOR_JSON")));
-      if (!node.isArray() || node.size() != query.length) continue;
-      double[] vector = new double[node.size()];
+      var indexEntry = indexed.get(String.valueOf(row.get("CHUNK_ID")));
+      if (indexEntry == null || !indexEntry.documentId().equals(String.valueOf(row.get("DOCUMENT_ID")))) continue;
+      double[] vector = indexEntry.vector();
+      if (vector.length != query.length) throw new ChatException("INDEX_UNAVAILABLE", "索引片段维度不一致，请重建索引后重试。", 503);
       double dot = 0, qnorm = 0, vnorm = 0;
       for (int i = 0; i < vector.length; i++) {
-        vector[i] = node.get(i).asDouble(Double.NaN);
         if (!Double.isFinite(vector[i])) { vnorm = 0; break; }
         dot += query[i] * vector[i]; qnorm += query[i] * query[i]; vnorm += vector[i] * vector[i];
       }

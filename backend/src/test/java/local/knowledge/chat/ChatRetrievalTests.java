@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.HashMap;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:s05chat;DB_CLOSE_DELAY=-1","DATA_ROOT=./target/s05-chat-data"})
 class ChatRetrievalTests {
@@ -68,6 +70,22 @@ class ChatRetrievalTests {
     assertTrue(chats.retrieve(kbA,"H2 metadata",5).isEmpty());
   }
 
+  @Test void retrievalUsesPublishedSnapshotVectorsInsteadOfDatabaseVectorCopies()throws Exception{
+    db.update("update document_chunk set vector_json=? where document_id=?",json.writeValueAsString(new double[768]),docA);
+    var sources=chats.retrieve(kbA,"Where is metadata stored?",5);
+    assertEquals(1,sources.size());assertEquals(docA,sources.get(0).get("documentId"));
+  }
+
+  @Test void missingCorruptAndIncompatibleSnapshotsFailClosed()throws Exception{
+    Path snapshot=indexPath();byte[] valid=Files.readAllBytes(snapshot);
+    Files.delete(snapshot);assertIndexUnavailable();
+    Files.writeString(snapshot,"{");assertIndexUnavailable();
+    var manifest=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(valid);manifest.put("indexVersion","index-v0");Files.write(snapshot,json.writeValueAsBytes(manifest));assertIndexUnavailable();
+    manifest=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(valid);manifest.put("model","other-model");Files.write(snapshot,json.writeValueAsBytes(manifest));assertIndexUnavailable();
+    manifest=(com.fasterxml.jackson.databind.node.ObjectNode)json.readTree(valid);manifest.put("dimension",767);Files.write(snapshot,json.writeValueAsBytes(manifest));assertIndexUnavailable();
+    Files.write(snapshot,valid);assertEquals(1,chats.retrieve(kbA,"Where is metadata stored?",5).size());
+  }
+
   @Test void streamedAnswerPersistsHistoryAndRealRetrievedCitationsAndTreatsDocumentAsUntrusted()throws Exception{
     AtomicReference<List<ModelGateway.Message>> request=new AtomicReference<>();
     doAnswer(inv->{request.set(inv.getArgument(0));java.util.function.Consumer<String> token=inv.getArgument(1);token.accept("H2 evidence answer");return null;})
@@ -102,7 +120,10 @@ class ChatRetrievalTests {
 
   private String base(String name){String id=UUID.randomUUID().toString();db.update("insert into knowledge_base(id,name,description,created_at,updated_at) values(?,?,?,?,?)",id,name,"",OffsetDateTime.now().toString(),OffsetDateTime.now().toString());return id;}
   private String document(String kb,String text,String status)throws Exception{String id=UUID.randomUUID().toString();String storage="raw/"+id+"/source.txt";Path raw=Path.of("./target/s05-chat-data").resolve(storage);Files.createDirectories(raw.getParent());Files.writeString(raw,text);db.update("insert into document(id,knowledge_base_id,original_name,media_type,size_bytes,sha256,storage_key,status,parser_version,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)",id,kb,"source.txt","text/plain",text.length(),"0".repeat(64),storage,status,"test",OffsetDateTime.now().toString(),OffsetDateTime.now().toString());return id;}
-  private void addChunk(String doc,String text,double[] vector)throws Exception{db.update("insert into document_chunk(id,document_id,ordinal,chunk_text,start_offset,pipeline_version,vector_json) values(?,?,?,?,?,?,?)",UUID.randomUUID().toString(),doc,0,text,0,settings.get(ModelSettingsService.Target.EMBEDDING).fingerprint(),json.writeValueAsString(vector));}
+  private void addChunk(String doc,String text,double[] vector)throws Exception{db.update("insert into document_chunk(id,document_id,ordinal,chunk_text,start_offset,pipeline_version,vector_json) values(?,?,?,?,?,?,?)",UUID.randomUUID().toString(),doc,0,text,0,settings.get(ModelSettingsService.Target.EMBEDDING).fingerprint(),json.writeValueAsString(vector));refreshSnapshot();}
+  private Path indexPath()throws Exception{return ((Path)ReflectionTestUtils.getField(library,"root")).resolve("index/index-v1.json");}
+  private void refreshSnapshot()throws Exception{var config=settings.get(ModelSettingsService.Target.EMBEDDING);var entries=new ArrayList<Map<String,Object>>();db.query("select c.id,c.document_id,c.vector_json from document_chunk c join document d on d.id=c.document_id where d.status in ('READY','INDEXING') and c.pipeline_version=?",rs->{try{var item=new HashMap<String,Object>();item.put("chunkId",rs.getString("id"));item.put("documentId",rs.getString("document_id"));item.put("vector",json.readTree(rs.getString("vector_json")));entries.add(item);}catch(Exception e){throw new IllegalStateException(e);}},config.fingerprint());Path snapshot=indexPath();Files.createDirectories(snapshot.getParent());json.writeValue(snapshot.toFile(),Map.of("indexVersion","index-v1","model",config.model(),"provider",config.provider().name(),"dimension",config.embeddingDimension(),"entries",entries));}
+  private void assertIndexUnavailable(){var error=assertThrows(ChatService.ChatException.class,()->chats.retrieve(kbA,"Where is metadata stored?",5));assertEquals("INDEX_UNAVAILABLE",error.code());}
   private void awaitMessage(String conversation,String role,String status)throws Exception{long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);while(System.nanoTime()<until){Integer count=db.queryForObject("select count(*) from chat_message where conversation_id=? and role=? and status=?",Integer.class,conversation,role,status);if(count!=null&&count>0)return;Thread.sleep(25);}fail("timed out waiting for chat message "+status);}
   private void awaitMessageCount(String conversation,String role,String status,int expected)throws Exception{long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);while(System.nanoTime()<until){Integer count=db.queryForObject("select count(*) from chat_message where conversation_id=? and role=? and status=?",Integer.class,conversation,role,status);if(count!=null&&count>=expected)return;Thread.sleep(25);}fail("timed out waiting for "+expected+" messages with status "+status);}
   private void awaitDocument(String doc,String status)throws Exception{long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(10);while(System.nanoTime()<until){if(status.equals(db.queryForObject("select status from document where id=?",String.class,doc)))return;Thread.sleep(25);}fail("timed out waiting for document "+status);}
