@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-09",
+  "timezone": "Asia/Shanghai",
+  "browser": "Microsoft Edge 154 via bundled Playwright",
+  "backend": "isolated local Ollama service",
+  "knowledgeBase": "S08 audit E2E 20261009 (deleted after test)",
+  "document": {
+    "name": "s08-e2e-java.txt",
+    "sizeBytes": 287,
+    "status": "READY",
+    "indexedChunks": 1
+  },
+  "workflow": [
+    "Home health status UP",
+    "Create/select synthetic knowledge base in browser",
+    "Upload TXT through file picker and wait for READY",
+    "Ask a question and verify citation plus answer",
+    "Generate and save a study plan",
+    "Generate three practice types and verify answers remain hidden before submission",
+    "Submit answers and verify score, reference answers, explanations, and feedback"
+  ],
+  "timingsMs": {
+    "uploadCreatedAtToReadyUpdatedAt": 4046,
+    "qaSubmitToFirstCitation": 12585,
+    "qaSubmitToAnswer": 12589,
+    "studyPlanGeneration": 17132,
+    "threeQuestionPracticeGeneration": 25242,
+    "practiceSubmissionToFeedback": 10606
+  },
+  "viewportChecks": {
+    "desktop": {
+      "width": 1440,
+      "height": 1000,
+      "pages": ["knowledge", "qa", "study", "practice", "feedback"],
+      "scrollWidths": [1440, 1440, 1440, 1440, 1440],
+      "horizontalOverflow": false
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "pages": ["knowledge", "qa", "study", "practice", "feedback"],
+      "scrollWidths": [390, 390, 390, 390, 390],
+      "horizontalOverflow": false
+    }
+  },
+  "limitations": [
+    "Single synthetic document and one measured run per operation; no load/throughput claim.",
+    "Public API was not configured or called; the existing S05 exception remains in force.",
+    "Generation maxTokens was 4096 in the isolated test service; production default remains 1200."
+  ],
+  "cleanup": "Synthetic knowledge bases, document, plan, practice session, and isolated data directory were removed after capture."
+}

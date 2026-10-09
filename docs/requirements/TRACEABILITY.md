@@ -36,6 +36,6 @@ CASE-01 覆盖 R01、R02、R03、R04、R05、R06、R11、R12；CASE-02 覆盖 R0
 | R07–R08 | 学习计划生成/编辑/排序/完成/重排和失败保护回归通过 | 后端 StudyPlanTests；S06 页面交互以既有浏览器/组件验证为基线 |
 | R09–R10 | 三类真实题目生成、答案隐藏、客观判分、简答评分重试及异常路径验证 | Ollama 合成资料抽查；新增解析兼容回归 |
 | R11 | 密钥/超时/维度/取消等协议测试与 Ollama 生成、嵌入实测 | 公共嵌入和公共完整 RAG 未验证 |
-| R12 | 本地数据隔离运行、服务恢复与 Edge 页面视口检查 | 本轮 Maven 全套复跑被 Windows Surefire classpath 不同根问题中止；不据此声明干净克隆通过 |
+| R12 | ZIP 干净副本锁文件安装、全回归、前后端 README 启动和 Edge 健康页均通过 | 全后端 40/40；前端 9/9/build；公共 API 仍按 S05 批准范围豁免；npm audit 上游告警转交复审评估 |
 
 详细执行结果、未通过项及影响见 `docs/testing/TEST_PLAN.md`、`docs/testing/TEST_REPORT.md` 和 `docs/testing/DEFECTS.md`。

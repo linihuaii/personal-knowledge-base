@@ -2,15 +2,19 @@
 
 - 日期：2026-10-09（Asia/Shanghai）
 - 前置阶段：S01–S07 均为 `APPROVED`；S07 最新审核为 `b9f58ad`。
-- 实现版本：见阶段日志与 S08 实现提交。
+- 实现代码未改动；复审核整改提交为纯验收文档与证据补充，代码版本为 `797128185930f228136c0bb291a5017a7dbf2f9a`。
 
 ## 自动化验证
 
 | 命令/证据 | 结果 |
 |---|---|
-| `cd backend; .\mvnw.cmd '-Dtest=PracticeTests,StudyPlanTests,S04DocumentWorkflowTests,ChatRetrievalTests,ModelSettingsTests,ModelGatewayProtocolTests,UnconfirmedPublicEmbeddingRecoveryTests,FileDatabasePersistenceTests' -DforkCount=1 test` | 前一轮最终功能回归 40 项通过；本轮完整复跑在首个测试类启动阶段被 Surefire 的 Windows 子进程 classpath “different root” 问题中止。最终修改后的 `PracticeTests` 独立重跑 7 项通过；本轮完整复跑不记为通过。 |
-| `cd frontend; npm test -- --run` | 4 个测试文件，9 项通过 |
-| `cd frontend; npm run build` | 通过；Vite 6.0.11，42 个模块 |
+| `cd backend; .\mvnw.cmd "-Dtest=PracticeTests,StudyPlanTests,S04DocumentWorkflowTests,ChatRetrievalTests,ModelSettingsTests,ModelGatewayProtocolTests,UnconfirmedPublicEmbeddingRecoveryTests,FileDatabasePersistenceTests" -DforkCount=0 test` | 当前实现提交完整回归 40 项通过，0 失败/错误/跳过；关闭 Surefire fork 后通过，原 Windows manifest/fork 根路径问题已绕开。 |
+| 从 ZIP 干净副本运行同一 Maven 命令 | 编译 16 个主源文件、9 个测试源文件；40 项通过，0 失败/错误/跳过。 |
+| `cd frontend; npm test -- --run` 与干净副本同命令 | 每处 4 个测试文件、9 项通过。 |
+| `cd frontend; npm run build` 与干净副本同命令 | 每处通过；Vite 6.0.11，42 个模块。 |
+| 干净副本 `npm ci --offline --cache <backend/target/s08-npm-cache>` | 从提交的 ZIP 源码副本全新安装 150 个锁定包；依赖 cache 为本轮网络安装所得，避免 npm 全局缓存权限问题。 |
+| 干净副本 README 启动 | `mvnw -B spring-boot:run` 监听 8181，健康 API 返回 `UP`；`npm run dev` 监听 5175；Edge 首页显示后端 `UP`。 |
+| `npm audit` 与 `npm audit --omit=dev` | 全依赖树：17 个受影响依赖节点（3 moderate、12 high、2 critical）；生产树：13 个（1 moderate、12 high、0 critical）；当前范围 `fixAvailable=false`，详见缺陷清单。 |
 | `git diff --check` | 通过 |
 
 后端用例覆盖跨库及非 READY 过滤、资料不足拒答、删除不命中、索引快照不兼容失败关闭、提示注入提示构造、模型连接/超时/取消、文件格式/大小/恢复/重试/删除、计划保留完成项、练习答案隔离/重复提交/格式校验/服务失败保留作答。新增用例覆盖模型将 JSON 包在代码围栏、单选答案文本唯一匹配与大小写/自然语言真假标签归一化。
@@ -25,16 +29,27 @@
 
 ## 浏览器与安全观察
 
-- Microsoft Edge 154 无头真实浏览器打开知识库与练习页面；1440×1000 桌面视口双栏、390×844 窄屏练习页单栏。页面截图见 [桌面练习页](evidence/S08-practice-desktop.png) 和 [窄屏练习页](evidence/S08-practice-mobile.png)。
-- 窄屏截图中导航可换行、知识库选择和资料/题型配置可见；本轮没有 Playwright 包，npm registry DNS 不可用，因此未执行脚本化浏览器完整点击流，也未对所有视口逐元素做自动溢出度量。jsdom 测试不作为浏览器 E2E 替代。
+- 使用 Microsoft Edge 154 与 Codex bundled Playwright 完成真实浏览器主流程：首页健康 → 创建/选择知识库 → 上传 TXT 并等待 READY → 新建问答/提交问题/验证来源与回答 → 生成并保存学习计划 → 生成三题练习/验证提交前答案隐藏 → 填答/提交/查看判分、答案、解析及反馈。
+- 桌面 1440×1000 与窄屏 390×844 均检查知识库、问答、计划、练习配置与反馈页面。各页面 `documentElement.scrollWidth` 等于视口宽度，没有横向溢出。截图包括 [桌面知识库](evidence/S08-audit-knowledge-desktop.png)、[桌面问答](evidence/S08-audit-qa-desktop.png)、[桌面学习计划](evidence/S08-audit-study-desktop.png)、[桌面练习](evidence/S08-audit-practice-desktop.png)、[桌面反馈](evidence/S08-audit-feedback-desktop.png)、[窄屏知识库](evidence/S08-audit-knowledge-mobile.png)、[窄屏问答](evidence/S08-audit-qa-mobile.png)、[窄屏学习计划](evidence/S08-audit-study-mobile.png)、[窄屏练习](evidence/S08-audit-practice-mobile.png)、[窄屏反馈](evidence/S08-audit-feedback-mobile.png)。详细交互与尺寸结果见 [E2E 结果](evidence/S08-audit-e2e-results.json)。
 - 安全回归：配置 API 只公开环境变量引用和是否配置状态；HTTP 对外部带密钥 API 会拒绝；路径存储/删除受 data root 检查；上传类型、损坏文件和 50MB 边界有集成测试；知识库内容在生成提示中作为不可信资料；Vue 模板文本插值未使用 v-html。默认服务监听 `127.0.0.1`，见 `application.yml`。
 
 ## 遗留与影响
 
-1. 当前未配置公共 API 凭据，当前环境 DNS 无法解析 npm registry；真实公共供应商调用、跨供应商 RAG 以及干净克隆安装未验证。S05 已批准的外部接入豁免边界继续适用，本报告不将其写作通过。
-2. 本轮真实 Edge 完成知识库页与练习页的页面/视口检查并留存截图，但没有脚本化完整 UI 端到端交互；上传、问答、计划和练习业务链由隔离 REST 请求及后端/组件测试覆盖。
-3. 本机单样本耗时不构成性能承诺；没有稳定硬件规格和大规模数据集，未形成负载测试或吞吐上限结论。
+1. 公共 API 凭据仍未配置；真实公共供应商调用/跨供应商 RAG 继续按 S05 已批准豁免边界，不写为已通过。
+2. 真实浏览器完整业务链和关键页面窄屏检查已完成；浏览器主流程使用本机 Ollama，生成配置 `maxTokens=4096`。生产默认 1200 的输出预算限制仍记录为 S08-03。
+3. `npm audit` 当前发现的上游依赖安全告警没有锁定范围内自动修复方案；不在本次无审核条件下强升依赖，需独立复审评估接受或要求单独依赖升级。
+4. 性能值为单机、单文档、单次小样本观察，没有多文档/高并发负载测试，不能作为吞吐上限或 SLA。
 
-## 最终完整套件复跑异常
+## 已解决的最终完整套件复跑异常
 
-2026-10-09 20:05（Asia/Shanghai）运行完整 Maven 套件时，首个 `ChatRetrievalTests` Spring 上下文启动后，Surefire fork 写出 `Boot Manifest-JAR contains absolute paths in classpath ... 'other' has different root` 并退出。该次没有产生本轮全套摘要。已单独对最终 PracticeService 解析改动运行 `PracticeTests`：7 项通过。既有上一轮 40 项结果仍可参考，但当前最终代码的全套回归需在 Surefire fork 路径问题排除后重新执行。
+2026-10-09 初次默认 fork 及禁用 manifest classpath 运行曾失败/停滞。审核复跑中以 `-DforkCount=0` 绕开 Windows fork 根路径问题，最终源码工作区与 ZIP 干净副本分别完整运行 40 项，均 0 失败、0 错误、0 跳过。Maven 对 no-fork 发出准确性提示；干净副本运行与源码运行结果一致。
+
+## 性能测量
+
+- 机器：Lenovo 83DG，Intel Core i7-14700HX，20 核/28 线程，16,160 MB RAM；测量时 Windows 可用 RAM 约 355 MB，系统其他进程负载较高。
+- 数据：隔离库单份自制 TXT，287 B、1 文档、1 个短文本段；Ollama `nomic-embed-text-v2-moe:latest`（768 维）与 `gemma4:e4b`。
+- 上传/解析/分段/嵌入/写索引整体：数据库 `UPDATED_AT-CREATED_AT` 观测 4.046 s。该数包含 Tika、embedding API、持久化与索引，不把 embedding 以外的系统时间精确拆分。
+- Ollama 单文本 embedding 请求：3.352 s；单提示生成请求：0.215 s。两者是单次 API round trip，非平均值。
+- UI 问答到首个 citation：12.585 s（查询 embedding 与本地索引读/过滤/相似度排序）；到完整回答 12.589 s。两项均为端到端，不把差值当作模型纯生成精确时间。
+- 学习计划生成：17.132 s；三题练习生成：25.242 s；答卷提交到反馈：10.606 s。均包含模型与应用处理的端到端墙钟时间。
+- 首引时间较单独 embedding 时间高，测量样本数只有 1 且系统可用内存较低；该结果仅记录观测值，不代表稳定性能或 SLA。
