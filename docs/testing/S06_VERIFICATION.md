@@ -2,31 +2,31 @@
 
 日期：2026-10-09（Asia/Shanghai）
 
-## 已实现与可核对行为
+## 本次复审返工验证
 
-- 计划生成：输入知识库、目标、基础、截止日期和每日分钟；只从当前知识库 `READY` 文档片段提供模型上下文；结构化 JSON 校验日期、时长、任务数和 chunk 引用，全部通过后才创建计划。
-- 编辑与排序：任务由稳定 ID 更新；新增/删除/改标题、改说明、调整日期、时长与顺序不会替换其他任务身份；完成项通过独立接口更新，不能由编辑请求伪造。
-- 重新规划：模型先成功生成且通过校验，再事务性地移除旧未完成任务并新增调整任务。已完成任务及其来源行保持原样；模型失败时不写入。
-- 来源：计划任务保存 chunk/document 外键，读取时只展示仍为 `READY` 的来源；知识探索从索引片段中的标题或段落整理条目并提供文档、chunk 和定位信息。
-- 资料不足：没有已索引资料时返回 `INSUFFICIENT_MATERIAL`；索引缺失/损坏返回 `INDEX_UNAVAILABLE`。
+| 检查 | 命令/方式 | 结果 |
+|---|---|---|
+| S06 与 S04 集成回归 | `cd backend; .\mvnw.cmd '-Dtest=StudyPlanTests,S04DocumentWorkflowTests' -DforkCount=0 test` | 通过：17 项，0 失败、0 错误、0 跳过 |
+| 前端生产构建 | `cd frontend; npm run build` | 通过：Vite production build 成功 |
+| 后端编译与打包 | `cd backend; .\mvnw.cmd -DskipTests package` | 通过：生产代码和测试源码编译，jar 打包成功 |
+| 空白检查 | `git diff --check` | 通过：无空白错误 |
 
-## 执行记录
+S06 集成测试在 Spring MockMvc 中验证真实 HTTP 控制器序列：生成计划、列表/读取 camelCase 响应、知识探索、打开文档预览、编辑和排序任务、完成标记及重新规划。其它测试验证模型格式错误和资料不足错误、READY 数据库片段不在当前索引时不会作为来源、格式错误的重新规划不改变旧计划、已完成历史日期可保存、删除资料后保留来源摘录、重建索引后旧来源诚实标记不可用，以及 V8 数据库中已有来源行升级至 V9 快照。
 
-| 命令/检查 | 结果 |
-|---|---|
-| `backend/.\mvnw.cmd -DskipTests package` | 通过；Java 17 编译、测试源码编译及打包成功 |
-| `frontend/npm run build` | 通过；Vite production build 成功 |
-| `git diff --check` | 通过；无空白错误 |
-| `backend/.\mvnw.cmd test -q` | 未完成；Surefire fork dump 报本机路径错误 `'other' has different root`，无本轮测试报告 |
-| `backend/.\mvnw.cmd -Dtest=StudyPlanTests test` | 新测试编译成功；Spring 测试 fork 在上下文启动时同样挂起，本轮未产生测试结论 |
-| `java -jar ...`（隔离 DATA_ROOT） | Flyway 验证并执行 V1–V8 成功；Tomcat 启动因沙箱 loopback selector `Permission denied: connect` 退出，故未能作 HTTP 冒烟 |
+S06 `StudyPlanTests` 的 8 项测试与 S04 `S04DocumentWorkflowTests` 的 9 项回归全部通过，覆盖上传解析、重试幂等、文档删除、处理中删除、索引发布恢复和数据库迁移。V8→V9 专项测试确认原始来源文件名与摘录被迁移，删除原 chunk 后来源快照仍存在。
 
-## 自动化测试范围
+## 真实模型边界
 
-新增 `StudyPlanTests` 覆盖非法结构化输出不创建计划、重新规划保留已完成任务与来源、索引缺失有明确错误。测试源代码已编译，但本轮无法执行；审核时可在正常本机执行 `cd backend; .\mvnw.cmd -Dtest=StudyPlanTests test`。
+计划生成/重新规划的集成测试用确定性 `ModelGateway` 替身提供 JSON 输出；本轮没有调用真实 Ollama 或公共模型生成计划。因此，字段校验、事务和 HTTP 行为已有自动化通过证据，模型供应商在实际部署中的 JSON 一致性仍未现场验证。原阶段 S05 的模型接入验证与豁免边界不变。
 
-## 限制
+## 修复对应关系
 
-- 没有在本轮调用真实生成模型产生学习计划；模型服务真实可用性仍取决于用户本机 S05 配置。
-- 知识探索当前使用标题/段落抽取，不调用模型生成语义关系，也不创建知识图谱。
-- 由于测试 fork 与 loopback 被当前执行环境限制，数据库迁移已验证，完整 HTTP/API 验收尚未完成。
+- 来源外键：新增 Flyway `V9__study_source_snapshots.sql`，复制 V8 来源到持久快照表后替换旧表；`study_task_source` 仅保留任务外键。计划和知识探索只从当前索引快照与 READY 数据库片段交集取来源。文件删除/索引重建测试通过，来源显示摘录与 `available=false`。
+- API 响应：计划、任务、来源和计划列表显式构造 camelCase DTO；MockMvc 验证 `/generate`、计划列表/读取、知识探索和任务操作响应字段。
+- 历史日期：仅未完成任务限制在今天至截止日；已有完成任务允许过去日期，并由集成测试通过。
+- 失败保护：非法 JSON 的首次生成不创建记录；非法重新规划保留原任务 ID、完成状态和数据。
+
+## 保留限制
+
+- 知识点探索继续按资料标题/段落抽取，不创建知识图谱。
+- 真实模型生成计划未执行；见“真实模型边界”。

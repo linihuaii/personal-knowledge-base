@@ -45,7 +45,12 @@ public class StudyPlanService {
   public Map<String,Object> plan(String id) {
     var rows = db.queryForList("select * from study_plan where id=?", id);
     if (rows.isEmpty()) throw error(HttpStatus.NOT_FOUND, "PLAN_NOT_FOUND", "学习计划不存在");
-    Map<String,Object> result = new LinkedHashMap<>(rows.get(0));
+    var row=rows.get(0);
+    Map<String,Object> result = new LinkedHashMap<>();
+    result.put("id",row.get("ID")); result.put("knowledgeBaseId",row.get("KNOWLEDGE_BASE_ID"));
+    result.put("goal",row.get("GOAL")); result.put("currentLevel",row.get("CURRENT_LEVEL"));
+    result.put("deadline",row.get("DEADLINE").toString()); result.put("dailyMinutes",row.get("DAILY_MINUTES"));
+    result.put("createdAt",row.get("CREATED_AT")); result.put("updatedAt",row.get("UPDATED_AT"));
     result.put("tasks", tasks(id));
     int total = db.queryForObject("select count(*) from study_task where plan_id=?", Integer.class, id);
     int completed = db.queryForObject("select count(*) from study_task where plan_id=? and completed=true", Integer.class, id);
@@ -55,7 +60,11 @@ public class StudyPlanService {
 
   public Map<String,Object> list(String knowledgeBaseId) {
     requireBase(knowledgeBaseId);
-    return Map.of("items", db.queryForList("select p.*, (select count(*) from study_task t where t.plan_id=p.id) task_count, (select count(*) from study_task t where t.plan_id=p.id and t.completed=true) completed_count from study_plan p where knowledge_base_id=? order by updated_at desc", knowledgeBaseId));
+    var items=new ArrayList<Map<String,Object>>();
+    for(var row:db.queryForList("select p.*, (select count(*) from study_task t where t.plan_id=p.id) task_count, (select count(*) from study_task t where t.plan_id=p.id and t.completed=true) completed_count from study_plan p where knowledge_base_id=? order by updated_at desc", knowledgeBaseId)){
+      items.add(Map.of("id",row.get("ID"),"knowledgeBaseId",row.get("KNOWLEDGE_BASE_ID"),"goal",row.get("GOAL"),"deadline",row.get("DEADLINE").toString(),"dailyMinutes",row.get("DAILY_MINUTES"),"taskCount",row.get("TASK_COUNT"),"completedCount",row.get("COMPLETED_COUNT"),"updatedAt",row.get("UPDATED_AT")));
+    }
+    return Map.of("items",items);
   }
 
   @Transactional
@@ -66,11 +75,10 @@ public class StudyPlanService {
     String safeLevel=validText(currentLevel, 1000, "当前基础", true);
     int safeDaily=validMinutes(dailyMinutes);
     LocalDate safeDeadline=validDate(deadline);
-    var sources=sources(String.valueOf(plan(id).get("KNOWLEDGE_BASE_ID")));
+    var sources=sources(String.valueOf(plan(id).get("knowledgeBaseId")));
     var byId=sources.stream().collect(Collectors.toMap(Source::chunkId,s->s,(a,b)->a));
     Set<String> keep=new HashSet<>();
     for(TaskInput t:normalized){
-      for(String ref:t.chunkIds()) if(!byId.containsKey(ref)) throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务引用的资料片段不存在或不属于当前知识库");
       if(Boolean.TRUE.equals(t.completed())){
         if(t.id()==null||t.id().isBlank()||db.queryForObject("select count(*) from study_task where id=? and plan_id=? and completed=true",Integer.class,t.id(),id)==0)
           throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","不能通过编辑直接伪造已完成任务");
@@ -80,6 +88,8 @@ public class StudyPlanService {
           throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务不属于当前计划");
         keep.add(t.id());
       }
+      for(String ref:t.chunkIds()) if(!byId.containsKey(ref) && (t.id()==null||t.id().isBlank()||db.queryForObject("select count(*) from study_task_source where task_id=? and chunk_id=?",Integer.class,t.id(),ref)==0))
+        throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务引用的资料片段不存在或不属于当前知识库");
     }
     db.update("update study_plan set goal=?,current_level=?,deadline=?,daily_minutes=?,updated_at=? where id=?",
         safeGoal,safeLevel,safeDeadline,safeDaily,OffsetDateTime.now().toString(),id);
@@ -89,24 +99,22 @@ public class StudyPlanService {
     }
     int order=0;
     for(TaskInput t:normalized){
-      if(Boolean.TRUE.equals(t.completed()))continue;
+      if(Boolean.TRUE.equals(t.completed())){db.update("update study_task set sort_order=? where id=? and plan_id=? and completed=true",order++,t.id(),id);continue;}
       String taskId=t.id()==null||t.id().isBlank()?UUID.randomUUID().toString():t.id();
       int updated=db.update("update study_task set title=?,description=?,scheduled_date=?,estimated_minutes=?,sort_order=? where id=? and plan_id=? and completed=false",t.title(),t.description(),t.scheduledDate(),t.estimatedMinutes(),order,taskId,id);
       if(updated==0)db.update("insert into study_task(id,plan_id,title,description,scheduled_date,estimated_minutes,completed,sort_order,created_at) values(?,?,?,?,?,?,false,?,?)",taskId,id,t.title(),t.description(),t.scheduledDate(),t.estimatedMinutes(),order,OffsetDateTime.now().toString());
-      db.update("delete from study_task_source where task_id=?",taskId);
-      for(String ref:t.chunkIds())db.update("insert into study_task_source(task_id,chunk_id,document_id) values(?,?,?)",taskId,ref,byId.get(ref).documentId());
+      Set<String> requested=new HashSet<>(t.chunkIds());
+      for(var oldSource:db.queryForList("select chunk_id from study_task_source where task_id=?",taskId))if(!requested.contains(String.valueOf(oldSource.get("CHUNK_ID"))))db.update("delete from study_task_source where task_id=? and chunk_id=?",taskId,oldSource.get("CHUNK_ID"));
+      for(String ref:t.chunkIds())if(byId.containsKey(ref)&&db.queryForObject("select count(*) from study_task_source where task_id=? and chunk_id=?",Integer.class,taskId,ref)==0)saveSource(taskId,byId.get(ref));
       order++;
     }
-    int nextOrder=order;
-    var done=db.queryForList("select id from study_task where plan_id=? and completed=true order by sort_order",id);
-    for(var row:done)db.update("update study_task set sort_order=? where id=?",nextOrder++,row.get("ID"));
     return plan(id);
   }
 
   @Transactional
   public Map<String,Object> markCompleted(String planId,String taskId,boolean completed){
     plan(planId);
-    int changed=db.update("update study_task set completed=?,sort_order=case when ? then 0 else sort_order end where id=? and plan_id=?",completed,completed,taskId,planId);
+    int changed=db.update("update study_task set completed=? where id=? and plan_id=?",completed,taskId,planId);
     if(changed==0)throw error(HttpStatus.NOT_FOUND,"TASK_NOT_FOUND","学习任务不存在");
     db.update("update study_plan set updated_at=? where id=?",OffsetDateTime.now().toString(),planId);
     return plan(planId);
@@ -115,13 +123,14 @@ public class StudyPlanService {
   @Transactional
   public Map<String,Object> replan(String id, String progress) {
     var current = plan(id);
-    String kbId = String.valueOf(current.get("KNOWLEDGE_BASE_ID"));
+    String kbId = String.valueOf(current.get("knowledgeBaseId"));
     var sources = sources(kbId);
     if (sources.isEmpty()) throw error(HttpStatus.UNPROCESSABLE_ENTITY, "INSUFFICIENT_MATERIAL", "没有可用的已索引资料，无法调整计划");
-    List<Map<String,Object>> completed = tasks(id).stream().filter(t -> Boolean.TRUE.equals(t.get("COMPLETED")) || Boolean.TRUE.equals(t.get("completed"))).toList();
-    List<Map<String,Object>> generated = generateTasks(new PlanRequest(kbId, String.valueOf(current.get("GOAL")), String.valueOf(current.get("CURRENT_LEVEL")), asDate(current.get("DEADLINE")), asInt(current.get("DAILY_MINUTES"))), sources, completed.stream().map(t -> Map.<String,Object>of("title", t.get("TITLE"), "scheduledDate", t.get("SCHEDULED_DATE"), "description", t.get("DESCRIPTION"))).toList(), progress);
+    List<Map<String,Object>> completed = tasks(id).stream().filter(t -> Boolean.TRUE.equals(t.get("completed"))).toList();
+    List<Map<String,Object>> generated = generateTasks(new PlanRequest(kbId, String.valueOf(current.get("goal")), String.valueOf(current.get("currentLevel")), LocalDate.parse(String.valueOf(current.get("deadline"))), (Integer)current.get("dailyMinutes")), sources, completed.stream().map(t -> Map.<String,Object>of("title", t.get("title"), "scheduledDate", t.get("scheduledDate"), "description", t.get("description"))).toList(), progress);
     db.update("delete from study_task where plan_id=? and completed=false", id);
-    insertTasks(id, generated, sources, completed.size());
+    int nextOrder=db.queryForObject("select coalesce(max(sort_order),-1)+1 from study_task where plan_id=? and completed=true",Integer.class,id);
+    insertTasks(id, generated, sources, nextOrder);
     db.update("update study_plan set updated_at=? where id=?", OffsetDateTime.now().toString(), id);
     return plan(id);
   }
@@ -184,14 +193,20 @@ public class StudyPlanService {
   }
 
   private List<Source> sources(String kb) {
-    try { library.readIndexSnapshot(); } catch (Exception e) { throw error(HttpStatus.SERVICE_UNAVAILABLE, "INDEX_UNAVAILABLE", "本地索引不可用，请先修复或重建索引"); }
-    return db.query("select c.id,c.document_id,d.original_name,c.chunk_text,c.page_number,c.section_name from document_chunk c join document d on d.id=c.document_id where d.knowledge_base_id=? and d.status='READY' order by d.created_at,c.ordinal", (rs,n)->new Source(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4), (Integer)rs.getObject(5),rs.getString(6)), kb);
+    LibraryService.IndexSnapshot snapshot;
+    try { snapshot=library.readIndexSnapshot(); } catch (Exception e) { throw error(HttpStatus.SERVICE_UNAVAILABLE, "INDEX_UNAVAILABLE", "本地索引不可用，请先修复或重建索引"); }
+    Map<String,String> indexed=new HashMap<>();snapshot.entries().forEach(entry->indexed.put(entry.chunkId(),entry.documentId()));
+    return db.query("select c.id,c.document_id,d.original_name,c.chunk_text,c.page_number,c.section_name from document_chunk c join document d on d.id=c.document_id where d.knowledge_base_id=? and d.status='READY' order by d.created_at,c.ordinal", (rs,n)->new Source(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4), (Integer)rs.getObject(5),rs.getString(6)), kb)
+        .stream().filter(source->source.documentId().equals(indexed.get(source.chunkId()))).toList();
   }
   private List<Map<String,Object>> tasks(String id) {
     var result = new ArrayList<Map<String,Object>>();
     for (var row : db.queryForList("select * from study_task where plan_id=? order by sort_order", id)) {
-      var task = new LinkedHashMap<String,Object>(row);
-      task.put("sources", db.queryForList("select s.chunk_id,s.document_id,d.original_name,c.page_number,c.section_name,c.chunk_text from study_task_source s join document d on d.id=s.document_id join document_chunk c on c.id=s.chunk_id where s.task_id=? and d.status='READY'", row.get("ID")));
+      var task = new LinkedHashMap<String,Object>();
+      task.put("id",row.get("ID")); task.put("planId",row.get("PLAN_ID")); task.put("title",row.get("TITLE"));
+      task.put("description",row.get("DESCRIPTION")); task.put("scheduledDate",row.get("SCHEDULED_DATE").toString());
+      task.put("estimatedMinutes",row.get("ESTIMATED_MINUTES")); task.put("completed",row.get("COMPLETED"));
+      task.put("sortOrder",row.get("SORT_ORDER")); task.put("sources",db.queryForList("select s.chunk_id,s.document_id,s.document_name,s.location,s.excerpt,case when c.id is null or d.status<>'READY' then false else true end available from study_task_source s left join document d on d.id=s.document_id left join document_chunk c on c.id=s.chunk_id and c.document_id=s.document_id where s.task_id=?",row.get("ID")).stream().map(this::sourceDto).toList());
       result.add(task);
     }
     return result;
@@ -208,23 +223,17 @@ public class StudyPlanService {
       LocalDate date=task.get("scheduledDate") instanceof LocalDate d?d:LocalDate.parse(String.valueOf(task.get("scheduledDate")));
       int minutes=((Number)task.getOrDefault("estimatedMinutes", 30)).intValue(); boolean completed=Boolean.TRUE.equals(task.get("completed"));
       db.update("insert into study_task(id,plan_id,title,description,scheduled_date,estimated_minutes,completed,sort_order,created_at) values(?,?,?,?,?,?,?,?,?)",taskId,id,title,description,date,minutes,completed,order++,OffsetDateTime.now().toString());
-      Object refs=task.get("chunkIds"); if(refs instanceof List<?> list) for(Object ref:list){Source s=byId.get(String.valueOf(ref));if(s==null)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务引用的资料片段不存在或不属于当前知识库");db.update("insert into study_task_source(task_id,chunk_id,document_id) values(?,?,?)",taskId,s.chunkId(),s.documentId());}
+      Object refs=task.get("chunkIds"); if(refs instanceof List<?> list) for(Object ref:list){Source s=byId.get(String.valueOf(ref));if(s==null)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务引用的资料片段不存在或不属于当前知识库");saveSource(taskId,s);}
     }
   }
   private List<TaskInput> normalizeInputs(List<TaskInput> inputs, LocalDate deadline, Integer dailyMinutes) {
     if(inputs==null||inputs.isEmpty()||inputs.size()>30)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务数量须为1至30项");
     var result=new ArrayList<TaskInput>(); LocalDate max=validDate(deadline); int maxMinutes=validMinutes(dailyMinutes)*3;
-    for(var t:inputs){if(t==null)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务内容无效");String title=validText(t.title(),300,"任务标题",false);String desc=validText(t.description(),4000,"任务说明",true);LocalDate date=validDate(t.scheduledDate());if(date.isBefore(LocalDate.now())||date.isAfter(max))throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务日期须在今天至截止日期之间");if(t.estimatedMinutes()==null||t.estimatedMinutes()<1||t.estimatedMinutes()>Math.min(180,maxMinutes))throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务时长无效");result.add(new TaskInput(t.id(),title,desc,date,t.estimatedMinutes(),Boolean.TRUE.equals(t.completed()),t.chunkIds()==null?List.of():t.chunkIds()));}
+    for(var t:inputs){if(t==null)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务内容无效");String title=validText(t.title(),300,"任务标题",false);String desc=validText(t.description(),4000,"任务说明",true);LocalDate date=t.scheduledDate();if(date==null||(!Boolean.TRUE.equals(t.completed())&&(date.isBefore(LocalDate.now())||date.isAfter(max))))throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","未完成任务日期须在今天至截止日期之间；已完成任务允许保留历史日期");if(t.estimatedMinutes()==null||t.estimatedMinutes()<1||t.estimatedMinutes()>Math.min(180,maxMinutes))throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务时长无效");result.add(new TaskInput(t.id(),title,desc,date,t.estimatedMinutes(),Boolean.TRUE.equals(t.completed()),t.chunkIds()==null?List.of():t.chunkIds()));}
     return result;
   }
-  private void replaceInputs(String id,List<TaskInput> inputs,boolean preserve) {
-    var oldDone=preserve?db.queryForList("select * from study_task where plan_id=? and completed=true order by sort_order",id):List.<Map<String,Object>>of();
-    db.update("delete from study_task where plan_id=? and completed=false",id);
-    int order=oldDone.size(); for(var row:oldDone) db.update("update study_task set sort_order=? where id=?",--order,row.get("ID"));
-    var sources=sources(String.valueOf(plan(id).get("KNOWLEDGE_BASE_ID")));
-    var byId=sources.stream().collect(Collectors.toMap(Source::chunkId,s->s,(a,b)->a));
-    for(var t:inputs){String tid=t.id()==null||t.id().isBlank()?UUID.randomUUID().toString():t.id();boolean isDone=Boolean.TRUE.equals(t.completed());if(isDone&& (t.id()==null||db.queryForObject("select count(*) from study_task where id=? and plan_id=? and completed=true",Integer.class,tid,id)==0))throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","不能通过编辑直接伪造已完成任务");if(isDone)continue;db.update("insert into study_task(id,plan_id,title,description,scheduled_date,estimated_minutes,completed,sort_order,created_at) values(?,?,?,?,?,?,false,?,?)",tid,id,t.title(),t.description(),t.scheduledDate(),t.estimatedMinutes(),order++,OffsetDateTime.now().toString());for(String ref:t.chunkIds()){Source s=byId.get(ref);if(s==null)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","任务引用的资料片段不存在或不属于当前知识库");db.update("insert into study_task_source(task_id,chunk_id,document_id) values(?,?,?)",tid,ref,s.documentId());}}
-  }
+  private void saveSource(String taskId,Source s){db.update("insert into study_task_source(task_id,chunk_id,document_id,document_name,location,excerpt) values(?,?,?,?,?,?)",taskId,s.chunkId(),s.documentId(),s.name(),location(s),s.text());}
+  private Map<String,Object> sourceDto(Map<String,Object> row){Map<String,Object> result=new LinkedHashMap<>();result.put("chunkId",row.get("CHUNK_ID"));result.put("documentId",row.get("DOCUMENT_ID"));result.put("documentName",row.get("DOCUMENT_NAME"));result.put("location",row.get("LOCATION"));result.put("excerpt",row.get("EXCERPT"));result.put("available",row.get("AVAILABLE"));return result;}
   private void validateRequest(PlanRequest r){if(r==null)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID","请求内容无效");requireBase(r.knowledgeBaseId());validText(r.goal(),500,"学习目标",false);validText(r.currentLevel(),1000,"当前基础",true);validDate(r.deadline());validMinutes(r.dailyMinutes());}
   private void requireBase(String id){if(id==null||db.queryForObject("select count(*) from knowledge_base where id=? and deleted_at is null",Integer.class,id)==0)throw error(HttpStatus.NOT_FOUND,"KB_NOT_FOUND","知识库不存在");}
   private static String validText(String value,int max,String label,boolean allowBlank){String s=value==null?"":value.trim();if((!allowBlank&&s.isBlank())||s.length()>max)throw error(HttpStatus.BAD_REQUEST,"PLAN_INVALID",label+"不能为空且不能超过"+max+"个字符");return s;}
