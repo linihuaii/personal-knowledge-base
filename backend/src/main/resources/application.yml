@@ -17,6 +17,18 @@ spring:
 management.endpoints.web.exposure.include: health,info
 management.endpoint.health.show-details: never
 app:
+  generation:
+    provider: ${GENERATION_PROVIDER:OLLAMA}
+    base-url: ${GENERATION_BASE_URL:${OLLAMA_BASE_URL:http://127.0.0.1:11434}}
+    model: ${GENERATION_MODEL:gemma4:e2b}
+    api-key-env: ${GENERATION_API_KEY_ENV:OPENAI_API_KEY}
+    timeout-ms: ${GENERATION_TIMEOUT_MS:60000}
+    temperature: ${GENERATION_TEMPERATURE:0.2}
+    max-tokens: ${GENERATION_MAX_TOKENS:1200}
   embedding:
+    provider: ${EMBEDDING_PROVIDER:OLLAMA}
     base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
     model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text-v2-moe:latest}
+    api-key-env: ${EMBEDDING_API_KEY_ENV:OPENAI_API_KEY}
+    timeout-ms: ${EMBEDDING_TIMEOUT_MS:60000}
+    dimension: ${EMBEDDING_DIMENSION:768}

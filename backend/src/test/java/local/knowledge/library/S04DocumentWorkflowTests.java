@@ -3,6 +3,8 @@ package local.knowledge.library;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
+import local.knowledge.model.ModelGateway;
+import local.knowledge.model.ModelSettingsService;
 
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
@@ -32,15 +34,17 @@ class S04DocumentWorkflowTests {
   @Autowired LibraryService service;
   @Autowired JdbcTemplate db;
   @Autowired com.fasterxml.jackson.databind.ObjectMapper json;
-  @MockBean OllamaEmbeddingClient embeddings;
+  @MockBean ModelGateway embeddings;
   String kb;
 
   @BeforeEach void setup() throws Exception {
-    when(embeddings.model()).thenReturn("nomic-embed-text-v2-moe:latest");
+    var settings=org.springframework.test.util.ReflectionTestUtils.getField(service,"modelSettings");
+    ModelSettingsService modelSettings=(ModelSettingsService)settings;
+    String model=modelSettings.get(ModelSettingsService.Target.EMBEDDING).model();
     when(embeddings.embed(anyList())).thenAnswer(inv -> {
       List<String> in=inv.getArgument(0); List<double[]> out=new ArrayList<>();
       for(String ignored:in){double[] v=new double[768];v[0]=1;out.add(v);}
-      return new OllamaEmbeddingClient.Result("nomic-embed-text-v2-moe:latest",768,out);
+      return new ModelGateway.Embeddings("OLLAMA",model,768,out);
     });
     kb=String.valueOf(service.createBase("S04 test "+UUID.randomUUID(),"").get("ID"));
   }
@@ -62,7 +66,8 @@ class S04DocumentWorkflowTests {
   }
 
   @Test void retryIsIdempotentAndDeleteRemovesFileChunksAndIndexEntry() throws Exception {
-    when(embeddings.embed(anyList())).thenThrow(new RuntimeException("injected failure")).thenAnswer(inv->{List<String> in=inv.getArgument(0);double[] v=new double[768];v[1]=1;return new OllamaEmbeddingClient.Result("nomic-embed-text-v2-moe:latest",768,Collections.nCopies(in.size(),v));});
+    String model=((ModelSettingsService)org.springframework.test.util.ReflectionTestUtils.getField(service,"modelSettings")).get(ModelSettingsService.Target.EMBEDDING).model();
+    when(embeddings.embed(anyList())).thenThrow(new RuntimeException("injected failure")).thenAnswer(inv->{List<String> in=inv.getArgument(0);double[] v=new double[768];v[1]=1;return new ModelGateway.Embeddings("OLLAMA",model,768,Collections.nCopies(in.size(),v));});
     var upload=service.upload(kb,new MockMultipartFile("file","retry.txt","text/plain","retry marker".getBytes()));String id=String.valueOf(upload.get("ID"));awaitStatus(id,"FAILED_RETRYABLE");
     service.retry(id);awaitStatus(id,"READY");
     assertEquals(1,db.queryForObject("select count(*) from document_chunk where document_id=?",Integer.class,id));
@@ -100,7 +105,8 @@ class S04DocumentWorkflowTests {
 
   @Test void deletingWhileEmbeddingIsInFlightEndsDeletedWithoutIndexEntry() throws Exception {
     CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);AtomicReference<Throwable> failure=new AtomicReference<>();
-    when(embeddings.embed(anyList())).thenAnswer(inv->{entered.countDown();if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("test timeout");List<String> in=inv.getArgument(0);double[] v=new double[768];return new OllamaEmbeddingClient.Result("nomic-embed-text-v2-moe:latest",768,Collections.nCopies(in.size(),v));});
+    String model=((ModelSettingsService)org.springframework.test.util.ReflectionTestUtils.getField(service,"modelSettings")).get(ModelSettingsService.Target.EMBEDDING).model();
+    when(embeddings.embed(anyList())).thenAnswer(inv->{entered.countDown();if(!release.await(10,TimeUnit.SECONDS))throw new IllegalStateException("test timeout");List<String> in=inv.getArgument(0);double[] v=new double[768];return new ModelGateway.Embeddings("OLLAMA",model,768,Collections.nCopies(in.size(),v));});
     var uploaded=service.upload(kb,new MockMultipartFile("file","concurrent.txt","text/plain","concurrent delete marker".getBytes()));String id=String.valueOf(uploaded.get("ID"));assertTrue(entered.await(10,TimeUnit.SECONDS));
     Thread deleter=new Thread(()->{try{service.deleteDocument(id);}catch(Throwable t){failure.set(t);}});deleter.start();Thread.sleep(100);release.countDown();deleter.join(10000);
     assertFalse(deleter.isAlive());assertNull(failure.get());assertEquals("DELETED",service.document(id).get("STATUS"));

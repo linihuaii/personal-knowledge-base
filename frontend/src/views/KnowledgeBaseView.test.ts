@@ -37,4 +37,23 @@ describe('KnowledgeBaseView S04 operations',()=>{
     expect(calls.some(c=>c.url.includes('?confirm=true')&&c.method==='DELETE')).toBe(true)
     app.unmount()
   })
+
+  it('requires notice before uploading text to a public embedding service',async()=>{
+    const uploads:Array<string>=[]
+    vi.stubGlobal('confirm',vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true))
+    vi.stubGlobal('fetch',vi.fn(async(input:any,init:any={})=>{const url=String(input),method=init.method||'GET'
+      if(url==='/api/v1/settings/models')return {ok:true,json:async()=>({generation:{provider:'OLLAMA'},embedding:{provider:'OPENAI_COMPATIBLE'}})}
+      if(url==='/api/v1/knowledge-bases')return {ok:true,json:async()=>({items:[{id:'kb-1',name:'Research'}]})}
+      if(url.startsWith('/api/v1/knowledge-bases/kb-1/documents')&&method==='GET')return {ok:true,json:async()=>({items:[]})}
+      if(url==='/api/v1/knowledge-bases/kb-1/documents'&&method==='POST'){uploads.push(method);return {ok:true,json:async()=>({id:'doc-1'})}}
+      return {ok:true,json:async()=>({})}
+    }))
+    const app=createApp(KnowledgeBaseView),root=document.createElement('div');document.body.append(root);app.mount(root);await flush()
+    expect(root.textContent).toContain('公共嵌入模式')
+    const input=root.querySelector('input[type="file"]') as HTMLInputElement
+    const setFile=()=>{Object.defineProperty(input,'files',{configurable:true,value:[new File(['text'],'notes.txt',{type:'text/plain'})]});input.dispatchEvent(new Event('change',{bubbles:true}))}
+    setFile();await flush();expect(uploads).toHaveLength(0)
+    setFile();await flush();expect(uploads).toHaveLength(1)
+    app.unmount()
+  })
 })
