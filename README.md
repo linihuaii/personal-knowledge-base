@@ -118,4 +118,4 @@ GitHub Actions 工作流位于 `.github/workflows/`，在 push 和 pull request 
 
 ## 许可证
 
-本项目采用 Apache License 2.0，见 [LICENSE](LICENSE)。第三方组件保留其各自版权和许可证；直接依赖及许可证核查范围见 [交付说明](docs/delivery/DELIVERY_NOTES.md)。
+本项目采用 MIT License，见 [LICENSE](LICENSE)。第三方组件保留其各自版权和许可证；直接依赖及许可证核查范围见 [交付说明](docs/delivery/DELIVERY_NOTES.md)。
