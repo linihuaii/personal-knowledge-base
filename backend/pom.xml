@@ -14,7 +14,8 @@
     <dependency><groupId>org.flywaydb</groupId><artifactId>flyway-core</artifactId><version>${flyway.version}</version></dependency>
     <dependency><groupId>org.apache.tika</groupId><artifactId>tika-core</artifactId><version>3.2.2</version></dependency>
     <dependency><groupId>org.apache.tika</groupId><artifactId>tika-parsers-standard-package</artifactId><version>3.2.2</version></dependency>
-    <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.5</version><scope>test</scope></dependency>
+    <!-- Tika's PDF parser needs PDFBox at runtime. Keep it outside test scope so packaged apps can parse PDFs. -->
+    <dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.5</version></dependency>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
   </dependencies>
   <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>

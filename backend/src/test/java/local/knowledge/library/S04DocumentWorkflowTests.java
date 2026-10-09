@@ -51,10 +51,11 @@ class S04DocumentWorkflowTests {
 
   @Test void fourPublicFormatsBecomeReadyAndArePreviewableDownloadableAndIndexed() throws Exception {
     Map<String,byte[]> samples=Map.of("sample.txt","S04 plain text marker".getBytes(),"sample.md","# S04 heading\nmarkdown marker".getBytes(),"sample.docx",docx(),"sample.pdf",pdf());
+    Map<String,String> expectedText=Map.of("sample.txt","S04 plain text marker","sample.md","markdown marker","sample.docx","S04 DOCX marker","sample.pdf","S04 PDF marker");
     for(var e:samples.entrySet()){
       var uploaded=service.upload(kb,new MockMultipartFile("file",e.getKey(),"application/octet-stream",e.getValue()));
       String id=String.valueOf(uploaded.get("ID")); awaitStatus(id,"READY");
-      assertTrue(service.preview(id).get("text").toString().length()>0,e.getKey());
+      assertTrue(service.preview(id).get("text").toString().contains(expectedText.get(e.getKey())),e.getKey());
       assertTrue(service.download(id).resource().exists(),e.getKey());
       assertTrue(db.queryForObject("select count(*) from document_chunk where document_id=?",Integer.class,id)>0,e.getKey());
       Path index=Path.of("./target/s04-workflow-data/index/index-v1.json");
