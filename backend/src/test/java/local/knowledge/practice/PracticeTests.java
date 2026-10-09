@@ -67,7 +67,7 @@ class PracticeTests {
     String created=mvc.perform(post("/api/v1/practice-sessions").contentType("application/json").content(json.writeValueAsString(request(List.of("SINGLE_CHOICE","TRUE_FALSE","SHORT_ANSWER"),3))))
         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
     var questions=json.readTree(created).path("questions");String choice=questions.get(0).path("id").asText(),tf=questions.get(1).path("id").asText(),shortId=questions.get(2).path("id").asText();
-    when(models.generate(anyList())).thenReturn("{\"grades\":[{\"questionId\":\""+shortId+"\",\"score\":0.75,\"feedback\":\"提到了顺序和重复元素。\"}]}");
+    when(models.generate(anyList())).thenReturn("```json\n{\"grades\":[{\"questionId\":\""+shortId+"\",\"score\":0.75,\"feedback\":\"提到了顺序和重复元素。\"}]}\n```");
     mvc.perform(post("/api/v1/practice-sessions/{id}/submit",json.readTree(created).path("id").asText()).contentType("application/json")
         .content(json.writeValueAsString(Map.of("answers",List.of(Map.of("questionId",choice,"answer","A"),Map.of("questionId",tf,"answer","TRUE"),Map.of("questionId",shortId,"answer","List 保持顺序且允许重复"))))))
         .andExpect(status().isOk()).andExpect(jsonPath("$.score").value(1.75)).andExpect(jsonPath("$.questions[0].scoringStatus").value("GRADED"))
@@ -82,6 +82,21 @@ class PracticeTests {
     String other=UUID.randomUUID().toString(),now=OffsetDateTime.now().toString();db.update("insert into knowledge_base(id,name,description,created_at,updated_at) values(?,?,?,?,?)",other,"other","",now,now);
     mvc.perform(post("/api/v1/practice-sessions").contentType("application/json").content(json.writeValueAsString(Map.of("knowledgeBaseId",kb,"documentIds",List.of("foreign-doc"),"questionTypes",List.of("SINGLE_CHOICE"),"difficulty","MEDIUM","questionCount",1))))
         .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("SOURCE_SCOPE_INVALID"));
+  }
+
+  @Test void normalizesUnambiguousModelChoiceLabelsAndBooleanWords()throws Exception{
+    when(models.generate(anyList())).thenReturn("{\"questions\":[{\"type\":\"SINGLE_CHOICE\",\"stem\":\"哪种集合保持顺序且允许重复？\",\"options\":[\"Set\",\"Map\",\"ArrayList\",\"HashSet\"],\"answer\":\"ArrayList\",\"explanation\":\"List 保持插入顺序并允许重复。\",\"chunkIds\":[\""+chunk+"\"]},{\"type\":\"TRUE_FALSE\",\"stem\":\"Set 只保留唯一元素。\",\"options\":[],\"answer\":\"True\",\"explanation\":\"资料明确说明 Set 仅保留唯一元素。\",\"chunkIds\":[\""+chunk+"\"]}]} ");
+    String created=mvc.perform(post("/api/v1/practice-sessions").contentType("application/json").content(json.writeValueAsString(request(List.of("SINGLE_CHOICE","TRUE_FALSE"),2))))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.questions[0].options[2]").value("ArrayList")).andReturn().getResponse().getContentAsString();
+    var questions=json.readTree(created).path("questions");String choice=questions.get(0).path("id").asText(),tf=questions.get(1).path("id").asText(),id=json.readTree(created).path("id").asText();
+    mvc.perform(post("/api/v1/practice-sessions/{id}/submit",id).contentType("application/json").content(json.writeValueAsString(Map.of("answers",List.of(Map.of("questionId",choice,"answer","C"),Map.of("questionId",tf,"answer","TRUE"))))))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.questions[0].correctAnswer").value("C")).andExpect(jsonPath("$.questions[0].score").value(1)).andExpect(jsonPath("$.questions[1].correctAnswer").value("TRUE")).andExpect(jsonPath("$.questions[1].score").value(1));
+  }
+
+  @Test void acceptsJsonWrappedInMarkdownFenceThenStillValidatesSchema()throws Exception{
+    when(models.generate(anyList())).thenReturn("```json\n"+questionJson("SINGLE_CHOICE","A").trim()+"\n```");
+    mvc.perform(post("/api/v1/practice-sessions").contentType("application/json").content(json.writeValueAsString(request(List.of("SINGLE_CHOICE"),1))))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.questions[0].stem").value("根据资料判断 List 的性质"));
   }
 
   @Test void failedShortAnswerGradingKeepsSubmissionAndCanBeRetried()throws Exception{
