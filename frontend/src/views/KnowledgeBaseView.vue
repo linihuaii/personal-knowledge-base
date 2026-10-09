@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onMounted,ref} from 'vue'
+import {onMounted,onUnmounted,ref} from 'vue'
 import {listBases,createBase,listDocuments,uploadDocument,deleteDocument,retryDocument,previewDocument,editBase,deleteBase} from '../api/client'
 const bases=ref<any[]>([]),docs=ref<any[]>([]),selected=ref(''),name=ref(''),desc=ref(''),query=ref(''),status=ref(''),error=ref(''),loading=ref(false)
 const id=(x:any)=>x.ID||x.id, val=(x:any,k:string)=>x[k.toUpperCase()]||x[k]
@@ -11,6 +11,8 @@ async function removeKb(b:any){if(!confirm('删除知识库会同时清理文档
 async function removeDoc(d:any){if(!confirm('删除后将清理原文件、片段和索引，确定继续？'))return;try{await deleteDocument(id(d));await load()}catch(e:any){error.value=e.message}}
 async function retry(d:any){try{await retryDocument(id(d));await load()}catch(e:any){error.value=e.message}}
 async function preview(d:any){try{alert((await previewDocument(id(d))).text)}catch(e:any){error.value=e.message}}
-onMounted(load)
+let refreshTimer:number|undefined
+onMounted(()=>{load();refreshTimer=window.setInterval(()=>{if(docs.value.some(d=>['PROCESSING','INDEXING','DELETING'].includes(val(d,'status'))))load()},2000)})
+onUnmounted(()=>{if(refreshTimer)window.clearInterval(refreshTimer)})
 </script>
 <template><section class="library"><div class="card"><h2>知识库</h2><div class="form"><input v-model="name" placeholder="知识库名称"><input v-model="desc" placeholder="描述"><button @click="create">创建</button></div><div v-for="b in bases" :key="id(b)" class="kb-row"><button class="base" :class="{chosen:selected===id(b)}" @click="selected=id(b);load()">{{val(b,'name')}}</button><button class="small" @click="editKb(b)">编辑</button><button class="small danger" @click="removeKb(b)">删除</button></div></div><div class="card"><h2>资料</h2><p v-if="error" class="error">{{error}}</p><template v-if="selected"><div class="form"><input v-model="query" placeholder="筛选文件名"><select v-model="status"><option value="">全部状态</option><option>PROCESSING</option><option>READY</option><option>FAILED_RETRYABLE</option></select><button @click="load">筛选</button></div><label class="upload">{{loading?'上传中…':'上传 PDF、DOCX、TXT 或 Markdown'}}<input type="file" accept=".pdf,.docx,.txt,.md" @change="upload"></label><ul class="docs"><li v-for="d in docs" :key="id(d)"><span>{{val(d,'original_name')}} <span class="tag">{{val(d,'status')}}</span></span><span><button class="small" v-if="val(d,'status')==='READY'" @click="preview(d)">预览</button><a class="small link" :href="`/api/v1/documents/${id(d)}/download`">下载</a><button class="small" v-if="val(d,'status')==='FAILED_RETRYABLE'" @click="retry(d)">重试</button><button class="small danger" @click="removeDoc(d)">删除</button></span></li></ul></template></div></section></template>

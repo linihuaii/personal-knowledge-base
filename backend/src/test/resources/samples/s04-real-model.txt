@@ -1,0 +1,2 @@
+S04 real Ollama upload acceptance sample.
+This locally authored text verifies that a document can move through Tika parsing, chunk storage, embedding, index publication, and READY status.

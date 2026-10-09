@@ -45,6 +45,8 @@ public class OllamaEmbeddingClient {
     return new Result(model, 768, vectors);
   }
 
+  public String model() { return model; }
+
   public record Result(String model, int dimension, List<double[]> vectors) {}
   private static class IOException extends Exception { IOException(String message) { super(message); } }
 }
