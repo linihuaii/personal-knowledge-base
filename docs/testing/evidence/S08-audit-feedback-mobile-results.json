@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-09",
+  "timezone": "Asia/Shanghai",
+  "browser": "Microsoft Edge 154.0.4258.62 via bundled Playwright",
+  "backend": "deterministic API fixture matching PracticeView.test.ts contract; browser-served frontend at isolated Vite 5174",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "documentScrollWidth": 390,
+  "bodyScrollWidth": 390,
+  "horizontalOverflow": false,
+  "feedbackCardMeasurements": {
+    ".practice-content": {
+      "x": 18,
+      "y": 618,
+      "width": 354,
+      "height": 551,
+      "visible": true
+    },
+    ".practice-content .section-title": {
+      "x": 45,
+      "y": 645,
+      "width": 300,
+      "height": 96,
+      "visible": true
+    },
+    ".practice-question": {
+      "x": 45,
+      "y": 755,
+      "width": 300,
+      "height": 387,
+      "visible": true
+    },
+    ".practice-question .task-meta": {
+      "x": 60,
+      "y": 1098,
+      "width": 285,
+      "height": 27,
+      "visible": true
+    }
+  },
+  "visibleItems": {
+    "作答反馈": true,
+    "0 / 100 分": true,
+    "你的答案：B": true,
+    "参考答案：A": true,
+    "解析：List 按插入顺序保存元素，并允许重复元素。": true,
+    "反馈：回答不正确，请对照标准答案和资料来源复习。": true,
+    "s08-e2e-java.txt · 第 1 页 ↗": true
+  },
+  "flow": [
+    "Opened /practice in Edge at 390×844",
+    "Loaded deterministic submitted answer fixture (1/1 graded)",
+    "Clicked submitted history item",
+    "Verified score, submitted answer, reference answer, explanation, feedback, and source in rendered page"
+  ],
+  "dataProvenance": "Synthetic deterministic API fixture; not live backend submitted state. Previous S08 E2E JSON records live Ollama submitted practice; this capture specifically validates the real Vue UI and mobile layout."
+}

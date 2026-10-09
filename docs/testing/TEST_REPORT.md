@@ -14,7 +14,7 @@
 | `cd frontend; npm run build` 与干净副本同命令 | 每处通过；Vite 6.0.11，42 个模块。 |
 | 干净副本 `npm ci --offline --cache <backend/target/s08-npm-cache>` | 从提交的 ZIP 源码副本全新安装 150 个锁定包；依赖 cache 为本轮网络安装所得，避免 npm 全局缓存权限问题。 |
 | 干净副本 README 启动 | `mvnw -B spring-boot:run` 监听 8181，健康 API 返回 `UP`；`npm run dev` 监听 5175；Edge 首页显示后端 `UP`。 |
-| `npm audit` 与 `npm audit --omit=dev` | 全依赖树：17 个受影响依赖节点（3 moderate、12 high、2 critical）；生产树：13 个（1 moderate、12 high、0 critical）；当前范围 `fixAvailable=false`，详见缺陷清单。 |
+| `npm audit --json` 与 `npm audit --omit=dev --json` | 升级前审计快照：完整树 7 个受影响根包（2 moderate、3 high、2 critical），生产树 4 个（1 moderate、3 high）；依赖路径影响数量见首次复审。升级 Vite 6.4.3、Vue 3.5.42、Vitest 4.1.11 后，两命令均退出码 0、0 项漏洞。前后原始 JSON、公告 ID/范围、依赖链与调用面分析见 [依赖安全告警影响分析](evidence/S08-dependency-audit-triage.md)。 |
 | `git diff --check` | 通过 |
 
 后端用例覆盖跨库及非 READY 过滤、资料不足拒答、删除不命中、索引快照不兼容失败关闭、提示注入提示构造、模型连接/超时/取消、文件格式/大小/恢复/重试/删除、计划保留完成项、练习答案隔离/重复提交/格式校验/服务失败保留作答。新增用例覆盖模型将 JSON 包在代码围栏、单选答案文本唯一匹配与大小写/自然语言真假标签归一化。
@@ -30,14 +30,14 @@
 ## 浏览器与安全观察
 
 - 使用 Microsoft Edge 154 与 Codex bundled Playwright 完成真实浏览器主流程：首页健康 → 创建/选择知识库 → 上传 TXT 并等待 READY → 新建问答/提交问题/验证来源与回答 → 生成并保存学习计划 → 生成三题练习/验证提交前答案隐藏 → 填答/提交/查看判分、答案、解析及反馈。
-- 桌面 1440×1000 与窄屏 390×844 均检查知识库、问答、计划、练习配置与反馈页面。各页面 `documentElement.scrollWidth` 等于视口宽度，没有横向溢出。截图包括 [桌面知识库](evidence/S08-audit-knowledge-desktop.png)、[桌面问答](evidence/S08-audit-qa-desktop.png)、[桌面学习计划](evidence/S08-audit-study-desktop.png)、[桌面练习](evidence/S08-audit-practice-desktop.png)、[桌面反馈](evidence/S08-audit-feedback-desktop.png)、[窄屏知识库](evidence/S08-audit-knowledge-mobile.png)、[窄屏问答](evidence/S08-audit-qa-mobile.png)、[窄屏学习计划](evidence/S08-audit-study-mobile.png)、[窄屏练习](evidence/S08-audit-practice-mobile.png)、[窄屏反馈](evidence/S08-audit-feedback-mobile.png)。详细交互与尺寸结果见 [E2E 结果](evidence/S08-audit-e2e-results.json)。
+- 桌面 1440×1000 与窄屏 390×844 的知识库、问答、计划、练习配置等真实 Edge 截图来自 S08 E2E。旧窄屏反馈图经最新审核确认实际显示练习配置页。本次在提升权限后以 Edge 154 + bundled Playwright 重拍了真实 Vue 前端窄屏反馈页：[窄屏反馈截图](evidence/S08-audit-feedback-mobile.png)、[可见性与宽度结果](evidence/S08-audit-feedback-mobile-results.json)。在 390×844 viewport 下打开已提交历史项，分数、作答、参考答案、解析、反馈、资料来源均出现在完整页面截图；`documentElement.scrollWidth=390`、`body.scrollWidth=390`，无横向溢出。此轮前端 UI 请求使用确定性 API fixture（与 `PracticeView.test.ts` 答卷契约一致），不是 live backend 答卷；既有真实 Ollama 后端主流程和真实提交仍见 [E2E 结果](evidence/S08-audit-e2e-results.json)。
 - 安全回归：配置 API 只公开环境变量引用和是否配置状态；HTTP 对外部带密钥 API 会拒绝；路径存储/删除受 data root 检查；上传类型、损坏文件和 50MB 边界有集成测试；知识库内容在生成提示中作为不可信资料；Vue 模板文本插值未使用 v-html。默认服务监听 `127.0.0.1`，见 `application.yml`。
 
 ## 遗留与影响
 
 1. 公共 API 凭据仍未配置；真实公共供应商调用/跨供应商 RAG 继续按 S05 已批准豁免边界，不写为已通过。
-2. 真实浏览器完整业务链和关键页面窄屏检查已完成；浏览器主流程使用本机 Ollama，生成配置 `maxTokens=4096`。生产默认 1200 的输出预算限制仍记录为 S08-03。
-3. `npm audit` 当前发现的上游依赖安全告警没有锁定范围内自动修复方案；不在本次无审核条件下强升依赖，需独立复审评估接受或要求单独依赖升级。
+2. 真实浏览器完整业务链使用本机 Ollama，生成配置 `maxTokens=4096`；真实窄屏反馈 UI 使用确定性 API fixture。生产默认 1200 的输出预算限制仍记录为 S08-03。
+3. 前端依赖按复审要求升级后，完整与生产 `npm audit` 均无已知告警。升级版本及主要修复范围、测试结果和原始审计快照见安全分析文档；后续依赖更新仍需复查。
 4. 性能值为单机、单文档、单次小样本观察，没有多文档/高并发负载测试，不能作为吞吐上限或 SLA。
 
 ## 已解决的最终完整套件复跑异常
@@ -45,6 +45,8 @@
 2026-10-09 初次默认 fork 及禁用 manifest classpath 运行曾失败/停滞。审核复跑中以 `-DforkCount=0` 绕开 Windows fork 根路径问题，最终源码工作区与 ZIP 干净副本分别完整运行 40 项，均 0 失败、0 错误、0 跳过。Maven 对 no-fork 发出准确性提示；干净副本运行与源码运行结果一致。
 
 ## 性能测量
+
+> 2026-10-09 S08 复审返工后状态：窄屏反馈截图与 UI 宽度测量已补，页面数据使用确定性 API fixture；依赖公告影响分析及升级后 audit JSON 也已补齐。产物仍等待独立复审，本报告不代表审核批准。
 
 - 机器：Lenovo 83DG，Intel Core i7-14700HX，20 核/28 线程，16,160 MB RAM；测量时 Windows 可用 RAM 约 355 MB，系统其他进程负载较高。
 - 数据：隔离库单份自制 TXT，287 B、1 文档、1 个短文本段；Ollama `nomic-embed-text-v2-moe:latest`（768 维）与 `gemma4:e4b`。

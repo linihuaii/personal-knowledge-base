@@ -13,13 +13,13 @@
     "naive-ui": "2.41.0",
     "pinia": "2.3.1",
     "typescript": "5.7.3",
-    "vite": "6.0.11",
-    "vue": "3.5.13",
+    "vite": "6.4.3",
+    "vue": "3.5.42",
     "vue-router": "4.5.0"
   },
   "devDependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.34.8",
     "jsdom": "26.0.0",
-    "vitest": "3.0.5"
+    "vitest": "4.1.11"
   }
 }
