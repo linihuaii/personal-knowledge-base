@@ -11,3 +11,9 @@
 | S08-05 | P2 | 性能结果只代表单机单资料小样本，且机器当时可用内存偏低 | 补测 Lenovo 83DG / Core i7-14700HX / 16 GB RAM、287 B 单 TXT 的 READY、RAG 首引、计划、练习、答卷与单次模型请求耗时 | 已具备可复现实测口径；未测试多文档/高并发/吞吐上限，不宣称 SLA |
 | S08-06 | P1 | 升级前 `npm audit` 发现 Vue/Vite 生产链与 Vitest/tinypool 开发工具链 advisory；复审要求给出公告、受影响版本、路径、调用面和本机暴露分析。 | 新增 [依赖安全告警影响分析](evidence/S08-dependency-audit-triage.md) 和升级前/后 full/prod JSON。按核实修复线将 Vite 更新至 6.4.3、Vue 更新至 3.5.42、Vitest 更新至 4.1.11；Vite 带动 esbuild 至 0.25.12，Vitest 4 移除 tinypool 路径。前端回归 9/9、构建通过；full 与 `--omit=dev` audit 均 0。 | **已修复**；升级后生产与完整依赖树均无 npm audit 告警。 |
 | S08-07 | P2 | 原 `S08-audit-feedback-mobile.png` 显示练习配置与历史列表，没有已提交反馈；此前 E2E JSON 只有宽度记录。 | 提升权限后使用 Edge 154 + bundled Playwright 在 390×844 打开 `/practice`，加载已提交答卷确定性 API fixture 并点击历史项；真实 Vue UI 截图显示判分、作答、参考答案、解析、反馈和来源；记录 document/body scrollWidth 均为 390。fixture 来源和边界见 JSON。 | **已补证**；确认反馈页面无横向溢出，完整页面截图包含来源。业务 live Ollama 完整 E2E 仍见原 S08 结果 JSON。 |
+
+## S09 本地人工复核新增缺陷
+
+| 编号 | 严重度 | 发现 | 复现与证据 | 当前状态 |
+|---|---|---|---|---|
+| S09-01 | P1 | 有文字的 PDF 经页面上传后解析/索引失败，状态为 `FAILED_RETRYABLE`，后端详情为 `PROCESS_FAILED / EMPTY_TEXT`。 | 隔离审核实例上传两份 ReportLab PDF 和一份按 S04 测试方式生成的 PDFBox PDF；三份均可由独立 PDF 阅读库提取文字，上传后原文件哈希一致；三份均失败。PDFBox 样例点击“重试”后 `ATTEMPT_COUNT=2`，仍为 `EMPTY_TEXT`。同实例 TXT 成功进入 `READY`。 | **待修复**；不能把 PDF 支持记为人工验收通过。排查运行时 Tika/PDF 解析依赖与实际类路径，修复后用独立启动实例复测。 |
