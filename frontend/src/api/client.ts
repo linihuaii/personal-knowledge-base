@@ -21,6 +21,16 @@ export async function replanStudyPlan(id:string,progress:string){return studyReq
 export async function markStudyTask(id:string,taskId:string,completed:boolean){return studyRequest(`/study-plans/${id}/tasks/${taskId}/complete`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({completed})}) as Promise<StudyPlan>}
 export async function listKnowledgeTopics(kb:string){return studyRequest(`/knowledge-bases/${kb}/knowledge-explorer`) as Promise<{items:any[];message:string}>}
 
+export type PracticeQuestionType='SINGLE_CHOICE'|'TRUE_FALSE'|'SHORT_ANSWER'
+export interface PracticeQuestion {id:string;ordinal:number;type:PracticeQuestionType;stem:string;options:string[];sources:Array<{chunkId:string;documentId:string;documentName:string;location:string;excerpt:string}>;answered?:boolean}
+export interface PracticeSession {id:string;knowledgeBaseId:string;difficulty:string;questionTypes:PracticeQuestionType[];questionCount:number;status:'IN_PROGRESS'|'SUBMITTED';createdAt:string;questions:PracticeQuestion[]}
+export async function generatePractice(payload:{knowledgeBaseId:string;documentIds:string[];questionTypes:PracticeQuestionType[];difficulty:'EASY'|'MEDIUM'|'HARD';questionCount:number}){return studyRequest('/practice-sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}) as Promise<PracticeSession>}
+export async function getPracticeSession(id:string){return studyRequest(`/practice-sessions/${id}`) as Promise<PracticeSession>}
+export async function listPracticeSessions(kb:string){return studyRequest(`/knowledge-bases/${kb}/practice-sessions`) as Promise<{items:any[]}>}
+export async function submitPractice(id:string,answers:Array<{questionId:string;answer:string}>){return studyRequest(`/practice-sessions/${id}/submit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers})})}
+export async function reviewPractice(id:string){return studyRequest(`/practice-sessions/${id}/review`)}
+export async function gradePendingPractice(id:string){return studyRequest(`/practice-sessions/${id}/grade-pending`,{method:'POST'})}
+
 export type ModelTarget='generation'|'embedding'
 export interface ModelConfig {provider:'OLLAMA'|'OPENAI_COMPATIBLE';baseUrl:string;model:string;apiKeyRef:string;timeoutMs:number;embeddingDimension:number;temperature:number;maxTokens:number;apiKeyConfigured?:boolean;explicitlyConfigured?:boolean}
 export async function getModelSettings(){const r=await fetch('/api/v1/settings/models');if(!r.ok)throw new Error('加载模型设置失败');return r.json() as Promise<{generation:ModelConfig;embedding:ModelConfig}>}

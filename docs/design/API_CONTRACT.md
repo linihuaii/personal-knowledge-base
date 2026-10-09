@@ -29,8 +29,11 @@
 | PATCH | `/study-plans/{id}/tasks/{taskId}/complete` | 标记或撤销任务完成 | `PLAN_NOT_FOUND`, `TASK_NOT_FOUND` |
 | GET | `/knowledge-bases/{kbId}/knowledge-explorer` | 从已索引资料读取知识点及来源 | `KB_NOT_FOUND`, `INDEX_UNAVAILABLE` |
 | POST | `/practice-sessions` | 生成练习 | `QUESTION_SCHEMA_INVALID`, `SOURCE_INSUFFICIENT` |
-| GET | `/practice-sessions/{id}` | 获取不含答案的题目 | — |
+| GET | `/practice-sessions/{id}` | 获取题目（永不返回答案、解析或评分字段） | `PRACTICE_SESSION_NOT_FOUND` |
+| GET | `/knowledge-bases/{kbId}/practice-sessions` | 查看本地练习历史 | `KB_NOT_FOUND` |
 | POST | `/practice-sessions/{id}/submit` | 提交并评分 | `ANSWER_INVALID`, `ALREADY_SUBMITTED` |
+| GET | `/practice-sessions/{id}/review` | 提交后查看答案、解析与反馈 | `SESSION_NOT_SUBMITTED` |
+| POST | `/practice-sessions/{id}/grade-pending` | 重试未完成的简答题辅助评分 | `SESSION_NOT_SUBMITTED` |
 | GET/PUT/POST | `/settings/models`, `/settings/models/{id}`, `/settings/models/test` | 配置/测试模型 | `MODEL_UNREACHABLE`, `EMBEDDING_DIMENSION_MISMATCH` |
 
 ## 3. SSE 问答事件
@@ -48,7 +51,9 @@ event: failed\ndata: {"code":"MODEL_TIMEOUT","message":"..."}
 
 ## 4. 安全契约
 
-题目 GET 永不返回 `answer`、`explanation` 或评分内部字段；这些字段仅在提交服务内部读取并在评分响应中返回。所有知识库相关资源通过路径库 ID 与资源库 ID 二次校验，拒绝跨库 ID。
+题目 GET 永不返回 `answer`、`explanation` 或评分内部字段；这些字段仅在提交/复习响应中返回。练习生成前端在模型使用公共 API 时提示将所选资料片段发送给供应商。来源仅从指定知识库 READY 文档和当前索引快照交集中选择，并保存来源摘录快照；越库资料范围会被拒绝。答案完整性与题目状态在事务内校验并持久化后，才调用简答辅助评分；评分服务不可用时返回已保存的作答和待评分状态，允许单独重试。客观题由服务端确定性判分。
+
+S07 执行补充：`POST /practice-sessions` 接收 `{knowledgeBaseId, documentIds, questionTypes, difficulty, questionCount}`；空 `documentIds` 表示库内全部已索引资料，难度为 `EASY/MEDIUM/HARD`，题数 1–20。题型为 `SINGLE_CHOICE`、`TRUE_FALSE`、`SHORT_ANSWER`。提交体为 `{answers:[{questionId,answer}]}`，每题必须且只能作答一次；单选仅接受 A-D，判断题仅接受 TRUE/FALSE。简答分数范围为 0–1，由生成模型按参考答案辅助评价，明确标注非确定性评分。
 
 S06 执行补充：计划生成请求为 `{knowledgeBaseId, goal, currentLevel, deadline, dailyMinutes}`；任务含标题、说明、日期、预计分钟、完成状态和来源 chunk ID。生成模型只提交 JSON；服务端校验日期、任务数量、时间范围和当前知识库内的 READY 片段引用后才保存。`PATCH /study-plans/{id}` 保存计划字段及任务排序/编辑，已有完成项不可被覆盖或伪造；重新规划只替换未完成任务。知识探索返回资料标题/段落、解释摘要和原始 `documentId`/`chunkId`，不创建知识图谱。
 

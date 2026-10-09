@@ -25,9 +25,9 @@ DocumentChunk N──1 EmbeddingIndexEntry
 | Citation | id, messageId, chunkId, quote, locationLabel | chunk 必须属于当前库；引用可追溯 |
 | StudyPlan | id, knowledgeBaseId?, goal, baseline, deadline, dailyMinutes, status | deadline 不早于当天；生成失败不覆盖旧版本 |
 | StudyTask | id, planId, ordinal, title, dueDate, minutes, status, sourceChunkIds | 已完成任务调整时不可删除 |
-| PracticeSession | id, knowledgeBaseId, config, status, startedAt | config 包含范围/题型/难度/数量 |
-| PracticeQuestion | id, sessionId, type, stem, options?, answer, explanation, sourceChunkIds | 答案只在提交服务内部可读 |
-| PracticeAnswer | id, questionId, submittedAnswer, score, feedback, submittedAt | 客观题确定性判分；简答标记辅助评价 |
+| PracticeSession | id, knowledgeBaseId, difficulty, questionTypes, documentIds, questionCount, status, createdAt, submittedAt | Flyway V10；状态为 `IN_PROGRESS` 或 `SUBMITTED` |
+| PracticeQuestion | id, sessionId, ordinal, type, stem, options?, answer, explanation, sourcesSnapshot | 答案只在提交/复习服务内部读取；来源名、位置、摘录快照无 chunk 外键 |
+| PracticeAnswer | questionId, submittedAnswer, score?, feedback?, scoringStatus, submittedAt | 客观题确定性判分；简答 `GRADED/UNAVAILABLE`，评分不可用仍保留作答 |
 
 ## 3. 处理状态机
 
