@@ -25,6 +25,9 @@
 | GET/PATCH | `/study-plans/{id}` | 查看/编辑计划 | `PLAN_INVALID`, `PLAN_NOT_FOUND` |
 | POST | `/study-plans/generate` | 生成计划 | `PLAN_GENERATION_INVALID`, `INSUFFICIENT_MATERIAL` |
 | POST | `/study-plans/{id}/replan` | 调整未完成任务 | `REPLAN_INVALID` |
+| GET | `/knowledge-bases/{kbId}/study-plans` | 列出知识库学习计划 | `KB_NOT_FOUND` |
+| PATCH | `/study-plans/{id}/tasks/{taskId}/complete` | 标记或撤销任务完成 | `PLAN_NOT_FOUND`, `TASK_NOT_FOUND` |
+| GET | `/knowledge-bases/{kbId}/knowledge-explorer` | 从已索引资料读取知识点及来源 | `KB_NOT_FOUND`, `INDEX_UNAVAILABLE` |
 | POST | `/practice-sessions` | 生成练习 | `QUESTION_SCHEMA_INVALID`, `SOURCE_INSUFFICIENT` |
 | GET | `/practice-sessions/{id}` | 获取不含答案的题目 | — |
 | POST | `/practice-sessions/{id}/submit` | 提交并评分 | `ANSWER_INVALID`, `ALREADY_SUBMITTED` |
@@ -46,6 +49,8 @@ event: failed\ndata: {"code":"MODEL_TIMEOUT","message":"..."}
 ## 4. 安全契约
 
 题目 GET 永不返回 `answer`、`explanation` 或评分内部字段；这些字段仅在提交服务内部读取并在评分响应中返回。所有知识库相关资源通过路径库 ID 与资源库 ID 二次校验，拒绝跨库 ID。
+
+S06 执行补充：计划生成请求为 `{knowledgeBaseId, goal, currentLevel, deadline, dailyMinutes}`；任务含标题、说明、日期、预计分钟、完成状态和来源 chunk ID。生成模型只提交 JSON；服务端校验日期、任务数量、时间范围和当前知识库内的 READY 片段引用后才保存。`PATCH /study-plans/{id}` 保存计划字段及任务排序/编辑，已有完成项不可被覆盖或伪造；重新规划只替换未完成任务。知识探索返回资料标题/段落、解释摘要和原始 `documentId`/`chunkId`，不创建知识图谱。
 
 ## 5. 模型适配契约
 

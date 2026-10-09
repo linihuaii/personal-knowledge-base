@@ -95,6 +95,25 @@ public class ModelGateway {
     catch (Exception e) { if (cancelled.get()) throw new CancellationException("CANCELLED"); throw translate(e); }
   }
 
+  public String generate(List<Message> messages) throws Exception {
+    try {
+      var config = settings.get(ModelSettingsService.Target.GENERATION);
+      var bodyMessages = messages.stream().map(m -> Map.of("role", m.role(), "content", m.content())).toList();
+      var body = config.provider() == ModelSettingsService.Provider.OLLAMA
+          ? Map.of("model", config.model(), "messages", bodyMessages, "stream", false,
+              "options", Map.of("temperature", 0.1, "num_predict", config.maxTokens(), "format", "json"))
+          : Map.of("model", config.model(), "messages", bodyMessages, "stream", false,
+              "temperature", 0.1, "max_tokens", config.maxTokens(), "response_format", Map.of("type", "json_object"));
+      var response = json.readTree(send(config, endpoint(config, "chat"), body));
+      String content = config.provider() == ModelSettingsService.Provider.OLLAMA
+          ? response.path("message").path("content").asText("")
+          : response.path("choices").path(0).path("message").path("content").asText("");
+      if (content.isBlank()) throw new ModelException("INVALID_RESPONSE", "生成模型未返回 JSON 内容");
+      return content;
+    } catch (ModelException e) { throw e; }
+    catch (Exception e) { throw translate(e); }
+  }
+
   public void cancel(AtomicBoolean cancelled) {
     cancelled.set(true);
     InputStream body = activeStreams.remove(cancelled);
