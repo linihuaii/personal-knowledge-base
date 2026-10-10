@@ -5,8 +5,8 @@
 ## 交付状态
 
 - 本地源码和课程材料已整理；可复现启动命令见根目录 README。
-- S08 干净源码副本在 Windows 完成验证。其他操作系统未做本轮实机部署验证；GitHub Actions 配置 Linux runner，但在本地没有线上运行结果。
-- 当前分支没有配置 Git remote，也未提供 GitHub 仓库地址。因此没有创建仓库、推送分支、CI 链接或 PR；S09 GitHub 交付项保留为阻塞。
+- S08 干净源码副本在 Windows 完成验证。其他操作系统未做本轮实机部署验证；2026-10-10 的 GitHub Actions Linux runner 上，后端与前端任务均通过。
+- GitHub 仓库为 <https://github.com/linihuaii/personal-knowledge-base>，`master` 已推送 CI 修复提交 `1d43e687b024fb9e5619c4386cb50d7b9f977e02`；[对应 CI 运行](https://github.com/linihuaii/personal-knowledge-base/actions/runs/38037221486) 成功。从远程重新克隆该提交后，后端 42 项、前端 9 项测试与前端构建均通过。S09 原 `BLOCKED` 审核结论尚待独立复核。
 - 本轮没有创建 Release、版本标签或发布受保护分支。
 
 ## 许可证选择
@@ -22,6 +22,5 @@
 
 ## 发布前待办
 
-1. 提供并核验正式 GitHub 仓库地址及推送凭据，设置 `origin` 后推送交付分支。
-2. 在线检查 GitHub Actions 实际状态，并保存仓库/CI 链接。
-3. 若要公开发布，再生成完整传递依赖 SBOM/许可证声明并逐项检查；按计划另行取得 Release/标签授权。
+1. 复核远程仓库、提交、CI 及从克隆源码启动应用的交付证据，更新 S09 阶段审核状态；已记录的练习来源支撑不足样例也需在审核中说明。
+2. 若要公开发布，再生成完整传递依赖 SBOM/许可证声明并逐项检查；按计划另行取得 Release/标签授权。

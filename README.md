@@ -36,7 +36,12 @@
 
 ### 1. 获取源码并准备模型
 
-取得本项目源码并进入根目录。如果已有 GitHub 仓库地址，可以执行 `git clone <仓库地址>`；当前交付记录尚未提供正式远程地址。
+从 [GitHub 仓库](https://github.com/linihuaii/personal-knowledge-base)获取源码并进入项目根目录：
+
+```powershell
+git clone https://github.com/linihuaii/personal-knowledge-base.git
+cd personal-knowledge-base
+```
 
 ```powershell
 ollama pull gemma4:e4b
@@ -129,7 +134,7 @@ npm run build
 
 后端 JAR 输出到 `backend/target/knowledge-base-backend-0.1.0-SNAPSHOT.jar`；在 `backend/` 下可运行 `java -jar target/knowledge-base-backend-0.1.0-SNAPSHOT.jar`。前端构建产物在 `frontend/dist/`。`-DforkCount=0` 用于避开本项目记录的 Windows Surefire fork 路径问题。
 
-2026-10-10 本地复核：后端 42 项测试、前端 9 项测试及前端构建通过；四种文本型文档可读取，严格资料问答返回正确来源。证据和边界见[项目复核记录](docs/process/reviews/PROJECT-20261010-复核记录.md)。CI 工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)；尚无线上运行结果。
+2026-10-10 本地复核：后端 42 项测试、前端 9 项测试及前端构建通过；四种文本型文档可读取，严格资料问答返回正确来源。证据和边界见[项目复核记录](docs/process/reviews/PROJECT-20261010-复核记录.md)。推送后的 [GitHub Actions 构建](https://github.com/linihuaii/personal-knowledge-base/actions/runs/38037221486) 中，前后端任务均通过；同一提交的远程重新克隆也通过后端测试、前端测试与构建。
 
 ## 数据与备份
 
@@ -159,7 +164,7 @@ docs/process/         阶段状态、执行日志和审核记录
 docs/delivery/        演示脚本、项目总结和交付说明
 ```
 
-项目执行与验收以 [`PLAN_MASTER.md`](PLAN_MASTER.md) 为准。S01–S08 已通过审核；S09 仍缺正式 GitHub 远程仓库、推送提交和线上 CI 证据，状态为 `BLOCKED`，见[阶段状态](docs/process/STAGE_STATUS.md)和[交付说明](docs/delivery/DELIVERY_NOTES.md)。
+项目执行与验收以 [`PLAN_MASTER.md`](PLAN_MASTER.md) 为准。S01–S08 已通过审核；S09 的远程仓库、推送与线上 CI 证据已补齐，原 `BLOCKED` 审核结论尚待独立复核，见[阶段状态](docs/process/STAGE_STATUS.md)和[交付说明](docs/delivery/DELIVERY_NOTES.md)。
 
 ## 许可证
 
