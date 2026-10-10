@@ -1,121 +1,166 @@
 # 智能知识库管理系统
 
-一个面向个人的本地知识库应用，支持资料导入、来源可追溯的检索问答、学习计划和练习反馈。知识库、会话、计划及文件保存在运行该应用的计算机上；无需账号。默认仅绑定 `127.0.0.1`，不应作为无认证公网服务部署。
+一个面向个人学习的本地知识库应用：导入资料，进行有来源的检索问答，制定学习计划，再通过练习与反馈巩固知识。无需注册或登录，资料和业务数据保存在本机。
 
-## 功能
+## 功能特性
 
-- 管理知识库和 PDF、DOCX、TXT、Markdown 资料；上传上限为 50 MB。
-- 查看解析状态和提取文本，按知识库检索并查看原文来源。
-- 使用严格资料模式或补充通用知识模式进行多轮问答。
-- 生成、编辑和调整学习计划；生成单选、判断、简答练习并查看作答反馈。
-- 分别配置生成模型和嵌入模型，支持 Ollama 与经验证的 OpenAI 兼容接口。
+- **知识库与文档：**创建、编辑和删除知识库；上传、筛选、预览、下载、删除文档，并查看处理状态和重试失败任务。支持文本型 PDF、DOCX、TXT、Markdown，单文件上限 50 MB。
+- **检索问答：**知识库范围内的多轮对话，支持严格资料模式和补充通用知识模式；回答以流式方式显示，并可打开引用来源。
+- **学习计划：**根据目标、基础、截止日期和每日时长生成计划，支持编辑、排序、完成标记、进度查看、重新规划和知识点探索。
+- **智能练习：**按资料范围、难度、题数和题型生成单选、判断、简答题；提交后查看评分、解析、来源和练习历史。简答评分属于模型辅助评价。
+- **模型配置：**生成模型和嵌入模型独立配置与测试，支持 Ollama 和已实现协议的 OpenAI 兼容服务。
 
-## 环境要求
+应用默认只监听 `127.0.0.1`，没有账号与访问控制，不适合直接部署到公网。扫描 PDF 的 OCR、旧版 `.doc`、多用户协作和云端托管不在当前范围内。模型生成内容可能有误，重要结论请核对来源。
 
-- Windows 10/11（本项目的干净副本、浏览器主流程在 Windows 验证）；Java 17；无需单独安装 Maven，仓库包含 Maven Wrapper。
-- Node.js 20 或更高版本与 npm。CI 使用 Node 20；S08 干净副本验收在 Node 24.21.0 上完成。
-- Ollama（可选，使用本地模型时需要）；或一个已配置的 OpenAI 兼容服务及其 API Key。
+## 技术栈
 
-项目使用 Spring Boot 3.5.6、Maven 3.9.11、Vue 3.5.42、Vite 6.4.3、TypeScript 5.7.3、Naive UI 2.41.0。锁定依赖见 `backend/pom.xml`、`backend/.mvn/wrapper/maven-wrapper.properties` 和 `frontend/package-lock.json`。
+| 部分 | 技术 |
+| --- | --- |
+| 前端 | Vue 3、TypeScript、Vite、Vue Router、Pinia、Naive UI |
+| 后端 | Java 17、Spring Boot 3.5.6、Maven Wrapper |
+| 存储 | H2 文件数据库、Flyway、本地文件存储与单机向量索引 |
+| 文档解析 | Apache Tika、PDFBox |
+| 接口 | REST JSON、SSE 流式问答 |
 
-## 最短启动流程（Windows PowerShell）
+具体依赖版本见 [`backend/pom.xml`](backend/pom.xml) 和 [`frontend/package-lock.json`](frontend/package-lock.json)。
 
-1. 克隆仓库并准备模型。模型 ID 和生成/嵌入配置必须与下方设置一致：
+## 快速开始
 
-   ```powershell
-   git clone <仓库克隆地址>
-   cd 个人项目-智能知识库管理
-   ollama pull gemma4:e4b
-   ollama pull nomic-embed-text-v2-moe:latest
-   ```
+以下步骤面向 **Windows 10/11 + PowerShell**，这是已进行干净副本部署和浏览器流程验证的环境。其他系统尚无同等实机验证记录。
 
-   确保 Ollama 服务已启动。若使用其他模型，须在应用的模型设置中分别配置生成模型与嵌入模型，并按嵌入模型输出维度设置维度。已有索引与嵌入维度/模型不兼容时需按应用提示重建索引。
+### 前置条件
 
-2. 在一个 PowerShell 窗口启动后端：
+- JDK 17：`java -version` 显示 17，并将 `JAVA_HOME` 指向该 JDK。
+- Node.js 20+ 和 npm：可用 `node --version`、`npm --version` 检查。
+- Ollama：用于本地生成和嵌入。首次构建和拉取模型需要联网及足够磁盘空间。仓库自带 Maven Wrapper，无需单独安装 Maven。
 
-   ```powershell
-   cd backend
-   $env:GENERATION_PROVIDER = 'OLLAMA'
-   $env:GENERATION_BASE_URL = 'http://127.0.0.1:11434'
-   $env:GENERATION_MODEL = 'gemma4:e4b'
-   $env:GENERATION_MAX_TOKENS = '4096'
-   $env:EMBEDDING_PROVIDER = 'OLLAMA'
-   $env:OLLAMA_BASE_URL = 'http://127.0.0.1:11434'
-   $env:OLLAMA_EMBEDDING_MODEL = 'nomic-embed-text-v2-moe:latest'
-   $env:EMBEDDING_DIMENSION = '768'
-   .\mvnw.cmd -B spring-boot:run
-   ```
+### 1. 获取源码并准备模型
 
-   `GENERATION_MAX_TOKENS=4096` 是 S08 Ollama 三题样本验证使用的输出预算；默认值 1200 曾导致该样本的结构化输出截断。较大的资料范围或题目数量仍可能需要调整预算。环境变量只对当前终端会话生效。`.env.example` 是配置项参考文件，Spring Boot 不会自动读取 `.env`。
-
-3. 在第二个 PowerShell 窗口启动前端：
-
-   ```powershell
-   cd frontend
-   npm ci
-   npm run dev
-   ```
-
-   打开 <http://127.0.0.1:5173>。开发服务器把 `/api` 请求代理到 `http://127.0.0.1:8080`。后端健康检查地址为 <http://127.0.0.1:8080/api/v1/health>。
-
-第一次构建需联网下载 Maven 与 npm 依赖。应用数据默认写入 `backend/data/db/` 和 `backend/data/` 下的文件存储目录；均为本地数据，不应提交到 Git。
-
-## 配置公共模型 API
-
-在启动后端前，将真实密钥放入当前进程环境，不要写入仓库文件或日志。例如：
+取得本项目源码并进入根目录。如果已有 GitHub 仓库地址，可以执行 `git clone <仓库地址>`；当前交付记录尚未提供正式远程地址。
 
 ```powershell
-$env:OPENAI_API_KEY = '<你的密钥>'
-$env:GENERATION_PROVIDER = 'OPENAI_COMPATIBLE'
-$env:GENERATION_BASE_URL = '<服务商提供的兼容 API 根地址>'
-$env:GENERATION_MODEL = '<服务商提供的生成模型 ID>'
-$env:GENERATION_MAX_TOKENS = '4096'
-$env:EMBEDDING_PROVIDER = 'OPENAI_COMPATIBLE'
-$env:OLLAMA_BASE_URL = '<兼容嵌入 API 的根地址>'
-$env:OLLAMA_EMBEDDING_MODEL = '<服务商提供的嵌入模型 ID>'
-$env:EMBEDDING_DIMENSION = '<该模型的实际输出维度>'
+ollama pull gemma4:e4b
+ollama pull nomic-embed-text-v2-moe:latest
+ollama list
 ```
 
-该兼容协议配置只针对已实现的 OpenAI 兼容端点；不同供应商的兼容程度、模型 ID 和嵌入维度需由使用者核实。公共 API 请求可能发送所选资料相关片段、问题、练习题或简答作答。页面会在适用操作前提示；只有在了解并同意后继续。没有配置公共服务时，Ollama 流程不会隐式回退到公共 API。生成与嵌入服务地址按各自配置独立填写。
+确认 Ollama 服务在 `http://127.0.0.1:11434` 运行；若未自动启动，在单独终端运行 `ollama serve`。若模型在自定义目录，启动服务前在同一终端设置 `OLLAMA_MODELS` 为实际模型目录，再用 `ollama list` 确认模型可见。
 
-## 构建与验证
+### 2. 启动后端
+
+在项目根目录打开一个 PowerShell 终端：
 
 ```powershell
 cd backend
-.\mvnw.cmd -B "-Dtest=PracticeTests,StudyPlanTests,S04DocumentWorkflowTests,ChatRetrievalTests,ModelSettingsTests,ModelGatewayProtocolTests,UnconfirmedPublicEmbeddingRecoveryTests,FileDatabasePersistenceTests" -DforkCount=0 test
+$env:GENERATION_PROVIDER = 'OLLAMA'
+$env:GENERATION_BASE_URL = 'http://127.0.0.1:11434'
+$env:GENERATION_MODEL = 'gemma4:e4b'
+$env:GENERATION_MAX_TOKENS = '4096'
+$env:EMBEDDING_PROVIDER = 'OLLAMA'
+$env:OLLAMA_BASE_URL = 'http://127.0.0.1:11434'
+$env:OLLAMA_EMBEDDING_MODEL = 'nomic-embed-text-v2-moe:latest'
+$env:EMBEDDING_DIMENSION = '768'
+.\mvnw.cmd -B spring-boot:run
+```
+
+检查健康接口：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8080/api/v1/health
+```
+
+预期返回 `status: UP`。`GENERATION_MAX_TOKENS=4096` 是已验证的本地三题练习样本使用的预算；后端默认值 1200 曾使该样本输出截断。
+
+### 3. 启动前端
+
+在项目根目录打开另一个 PowerShell 终端：
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+打开 <http://127.0.0.1:5173>。前端开发服务器默认将 `/api` 代理到 `http://127.0.0.1:8080`。停止服务时，在相应终端按 `Ctrl+C`。
+
+### 4. 体验完整流程
+
+创建知识库 → 上传有可提取文字的文档并等待 `READY` → 在“模型设置”测试两个模型 → 在“问答”提问并打开来源 → 生成学习计划 → 生成练习、提交并查看反馈。
+
+PDF、DOCX、TXT、Markdown 各有打包后端和真实本地嵌入服务的上传、`READY` 与正文预览记录，见[格式读取验证](docs/testing/evidence/S09-document-format-runtime-smoke.md)。该记录不代表扫描件或所有复杂排版均可读取。
+
+## 配置
+
+配置参考位于 [`.env.example`](.env.example)，实际默认值见 [`application.yml`](backend/src/main/resources/application.yml)。Spring Boot **不会自动加载** `.env.example`；请在启动后端的终端设置环境变量，或通过应用“模型设置”页保存模型配置。已保存的页面配置应以页面显示值为准。
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `SERVER_ADDRESS` / `SERVER_PORT` | `127.0.0.1` / `8080` | 后端监听地址和端口。 |
+| `DATA_ROOT` | `./data` | 数据目录；相对路径基于后端启动目录。 |
+| `GENERATION_PROVIDER` / `EMBEDDING_PROVIDER` | `OLLAMA` / `OLLAMA` | 可选 `OLLAMA` 或 `OPENAI_COMPATIBLE`。 |
+| `GENERATION_BASE_URL` / `GENERATION_MODEL` | 本地 Ollama 地址 / `gemma4:e2b` | 生成服务地址与模型；上面的启动命令改用 `gemma4:e4b`。 |
+| `OLLAMA_BASE_URL` / `OLLAMA_EMBEDDING_MODEL` | `http://127.0.0.1:11434` / `nomic-embed-text-v2-moe:latest` | 嵌入服务地址与模型。公共嵌入服务也使用这两个配置项。 |
+| `EMBEDDING_DIMENSION` | `768` | 必须与实际嵌入向量维度一致。 |
+| `GENERATION_MAX_TOKENS` | `1200` | 模型输出预算。 |
+| `GENERATION_TIMEOUT_MS` / `EMBEDDING_TIMEOUT_MS` | `60000` / `60000` | 模型请求超时，单位毫秒。 |
+| `GENERATION_API_KEY_ENV` / `EMBEDDING_API_KEY_ENV` | `OPENAI_API_KEY` | 公共服务密钥所在的环境变量**名称**。 |
+
+若后端更换端口，启动前端前设置代理地址，例如 `$env:VITE_API_PROXY = 'http://127.0.0.1:18092'`。前端端口可用 `npm run dev -- --host 127.0.0.1 --port 15175` 指定。更换嵌入模型或维度后，应按模型设置页提示重建旧索引。
+
+### 使用公共模型服务
+
+项目仅实现指定的 OpenAI 兼容协议，不能保证所有供应商完全兼容。启动后端前，在本机进程环境设置真实密钥和相应的 `GENERATION_PROVIDER`、`GENERATION_BASE_URL`、`GENERATION_MODEL`、`EMBEDDING_PROVIDER`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`、`EMBEDDING_DIMENSION`；生成和嵌入可选不同服务。不要把密钥写入仓库、日志或截图。
+
+公共服务请求可能发送所选资料片段、问题、练习内容或简答作答；界面在适用操作前提示。请在知晓后使用。Ollama 流程不会隐式回退到公共 API。已有 DeepSeek 公共生成真实连接记录；公共嵌入及完整公共 RAG 尚未完成真实验证，详见[测试报告](docs/testing/TEST_REPORT.md)。
+
+## 构建与测试
+
+在项目根目录执行：
+
+```powershell
+cd backend
+.\mvnw.cmd -B -DforkCount=0 test
+.\mvnw.cmd -B -DskipTests package
 cd ..\frontend
 npm ci
 npm test -- --run
 npm run build
-npm audit
-npm audit --omit=dev
 ```
 
-S08 在 Windows 干净源码副本中验证后端 40 项、前端 9 项均通过，前端生产构建通过，完整及生产 npm audit 均为零告警。当前 Maven Wrapper 的完整后端验证采用 `-DforkCount=0`，以避开已记录的 Windows Surefire fork 路径问题。真实 Ollama 流程和确定性测试证据分别见 `docs/testing/TEST_REPORT.md`。公共 API 真实连接、公共嵌入及完整公共 RAG 未验证，仍按 S05 批准记录为有限豁免。
+后端 JAR 输出到 `backend/target/knowledge-base-backend-0.1.0-SNAPSHOT.jar`；在 `backend/` 下可运行 `java -jar target/knowledge-base-backend-0.1.0-SNAPSHOT.jar`。前端构建产物在 `frontend/dist/`。`-DforkCount=0` 用于避开本项目记录的 Windows Surefire fork 路径问题。
 
-GitHub Actions 工作流位于 `.github/workflows/`，在 push 和 pull request 时运行后端测试、前端测试和构建。S09 尚未完成 GitHub 仓库绑定；本地工作区没有配置 Git remote，因此目前没有线上 CI 链接。
+2026-10-10 本地复核：后端 42 项测试、前端 9 项测试及前端构建通过；四种文本型文档可读取，严格资料问答返回正确来源。证据和边界见[项目复核记录](docs/process/reviews/PROJECT-20261010-复核记录.md)。CI 工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)；尚无线上运行结果。
 
-## 备份与恢复
+## 数据与备份
 
-关闭前后端进程后，复制整个 `backend/data/` 目录到安全位置，即可备份本地数据库及资料文件。恢复时，将备份目录放回同一相对位置后再启动。不要在服务运行期间只复制 H2 数据库文件；不要把包含个人资料的备份提交或发送给他人。建议定期备份，并先在副本环境确认可恢复。
+从 `backend/` 启动时，默认数据目录是 `backend/data/`，包含 H2 数据库、原始文件和处理结果；已由 [`.gitignore`](.gitignore) 排除。备份前停止后端，然后复制**整个** `DATA_ROOT` 目录。恢复时先停止后端，再将完整备份放回原位置，或让 `DATA_ROOT` 指向恢复目录。不要仅复制运行中的数据库文件；备份可能包含私人资料，应妥善保存。
 
 ## 常见问题
 
-- **后端无法连接模型：**确认 Ollama 正在运行、模型已下载，并检查模型设置中的服务地址、模型 ID 和嵌入维度。
-- **练习生成报结构错误或截断：**提高 `GENERATION_MAX_TOKENS`（例如 4096），减少单次题目数或缩小资料范围后重试。
-- **文档一直处理中或处理失败：**查看后端控制台的错误信息；确认文件属于支持格式、大小不超过 50 MB，再使用页面的重试操作。
-- **浏览器页面打不开或提示后端离线：**分别确认前后端进程仍在运行，并打开健康检查地址确认后端状态。
-- **端口已被占用：**启动后端前设置 `SERVER_PORT`；前端开发端口可在 `frontend/vite.config.ts` 修改，或关闭占用进程。
-- **公共模型请求失败：**确认供应商兼容 API 地址、模型 ID、Key 环境变量名与服务端配置一致，并检查供应商的网络/额度限制。密钥只在本机环境变量中设置。
+| 问题 | 处理方式 |
+| --- | --- |
+| `ollama list` 为空 | 检查 Ollama 服务、模型下载状态及服务进程所用的 `OLLAMA_MODELS` 目录。 |
+| 模型连接失败 | 在“模型设置”分别测试生成与嵌入；核对地址、模型 ID、维度及超时。 |
+| 文档处理失败 | 核对格式、50 MB 限制和文本是否可提取；查看后端日志，修正后重试。扫描 PDF 不支持 OCR。 |
+| PDF 上传成功但没有正文 | 确认使用含 PDFBox 运行依赖的当前后端包；旧版包的解析缺陷已修复。 |
+| 练习生成内容截断 | 提高 `GENERATION_MAX_TOKENS`，减少题数或缩小资料范围。 |
+| 页面显示后端离线 | 打开 `/api/v1/health` 检查后端；若更换后端端口，设置 `VITE_API_PROXY` 并重启前端。 |
+| 端口被占用 | 设置 `SERVER_PORT`，或使用 Vite 的 `--port` 参数，并同步调整代理地址。 |
 
-## 文档与课程材料
+## 项目结构与文档
 
-- [课程项目总结](docs/delivery/PROJECT_SUMMARY.md)
-- [演示脚本](docs/delivery/DEMO_SCRIPT.md)
-- [交付和授权说明](docs/delivery/DELIVERY_NOTES.md)
-- 需求与验收：[需求规格](docs/requirements/SRS.md)、[需求追踪表](docs/requirements/TRACEABILITY.md)、[测试计划](docs/testing/TEST_PLAN.md)、[测试报告](docs/testing/TEST_REPORT.md)
-- 阶段过程：[阶段索引](docs/process/STAGE_STATUS.md)、阶段日志与审核记录见 `docs/process/`
+```text
+backend/              Spring Boot 后端、数据库迁移和测试
+frontend/             Vue 前端、组件测试和构建配置
+docs/requirements/    需求规格与追踪
+docs/design/          架构、数据与 API 设计
+docs/testing/         测试报告、缺陷与验证证据
+docs/process/         阶段状态、执行日志和审核记录
+docs/delivery/        演示脚本、项目总结和交付说明
+```
+
+项目执行与验收以 [`PLAN_MASTER.md`](PLAN_MASTER.md) 为准。S01–S08 已通过审核；S09 仍缺正式 GitHub 远程仓库、推送提交和线上 CI 证据，状态为 `BLOCKED`，见[阶段状态](docs/process/STAGE_STATUS.md)和[交付说明](docs/delivery/DELIVERY_NOTES.md)。
 
 ## 许可证
 
-本项目采用 MIT License，见 [LICENSE](LICENSE)。第三方组件保留其各自版权和许可证；直接依赖及许可证核查范围见 [交付说明](docs/delivery/DELIVERY_NOTES.md)。
+本项目采用 [MIT License](LICENSE)。第三方依赖保留各自的许可证；核查范围见[交付说明](docs/delivery/DELIVERY_NOTES.md)。

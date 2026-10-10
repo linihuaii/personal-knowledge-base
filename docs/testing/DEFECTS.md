@@ -16,4 +16,4 @@
 
 | 编号 | 严重度 | 发现 | 复现与证据 | 当前状态 |
 |---|---|---|---|---|
-| S09-01 | P1 | 有文字的 PDF 经页面上传后解析/索引失败，状态为 `FAILED_RETRYABLE`，后端详情为 `PROCESS_FAILED / EMPTY_TEXT`。 | 根因是 PDFBox 3.0.5 被声明为 `test` scope，测试 classpath 可解析而生产 JAR 缺少 PDFBox 核心类。已改为正式运行依赖；S04 测试改为断言正文标记。以修复后的可执行 JAR 和本机 Ollama 上传 PDF、DOCX、Markdown、TXT，四者均 `READY` 且预览含预期文本，详情见 [打包应用格式读取验证](evidence/S09-document-format-runtime-smoke.md)。 | **已修复并完成生产包实测**；S04 审核待复核。 |
+| S09-01 | P1 | 有文字的 PDF 经页面上传后解析/索引失败，状态为 `FAILED_RETRYABLE`，后端详情为 `PROCESS_FAILED / EMPTY_TEXT`。 | 根因是 PDFBox 3.0.5 被声明为 `test` scope，测试 classpath 可解析而生产 JAR 缺少 PDFBox 核心类。已改为正式运行依赖；S04 测试改为断言正文标记。以修复后的可执行 JAR 和本机 Ollama 上传 PDF、DOCX、Markdown、TXT，四者均 `READY` 且预览含预期文本，详情见 [打包应用格式读取验证](evidence/S09-document-format-runtime-smoke.md)。 | **已修复并完成生产包实测**；S04 已复审通过。 |
